@@ -1,0 +1,24 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "1.0",
+	"FriendlyName": "GOL_Demo",
+	"Description": "",
+	"Category": "Other",
+	"CreatedBy": "William Mishra-Manning, SnkeOS",
+	"CreatedByURL": "",
+	"DocsURL": "",
+	"MarketplaceURL": "",
+	"SupportURL": "",
+	"CanContainContent": true,
+	"IsBetaVersion": false,
+	"IsExperimentalVersion": false,
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "GOL_Demo",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	]
+}

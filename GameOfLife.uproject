@@ -1,0 +1,22 @@
+{
+	"FileVersion": 3,
+	"EngineAssociation": "{8FE63CC4-4073-520C-F47F-6D9A1DCAFCE2}",
+	"Category": "",
+	"Description": "",
+	"Modules": [
+		{
+			"Name": "GameOfLife",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "ModelingToolsEditorMode",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		}
+	]
+}
