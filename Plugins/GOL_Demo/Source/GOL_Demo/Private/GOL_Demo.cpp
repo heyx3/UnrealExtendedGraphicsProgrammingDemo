@@ -1,5 +1,6 @@
 #include "GOL_Demo.h"
 
+#include "RenderGraphUtils.h"
 #include "Interfaces/IPluginManager.h"
 
 #define LOCTEXT_NAMESPACE "FGOL_DemoModule"
@@ -10,6 +11,8 @@ void FGOL_DemoModule::StartupModule()
 	auto thisPlugin = IPluginManager::Get().FindPlugin(TEXT("GOL_Demo"));
 	auto thisShadersDir = FPaths::Combine(thisPlugin->GetBaseDir(), TEXT("Shaders"));
 	AddShaderSourceDirectoryMapping(TEXT("/GameOfLife"), thisShadersDir);
+
+	
 }
 
 void FGOL_DemoModule::ShutdownModule()
