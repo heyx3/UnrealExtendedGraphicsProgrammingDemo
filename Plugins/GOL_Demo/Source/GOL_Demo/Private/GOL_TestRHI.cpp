@@ -16,7 +16,7 @@ void A_GOL_TestRHI::BeginPlay()
 void A_GOL_TestRHI::Tick(float deltaSeconds)
 {
 	Super::Tick(deltaSeconds);
-
+	
 	auto* resource = TestOutput->GetResource();
 	auto* rhi = (resource == nullptr) ? nullptr : resource->GetTexture2DRHI();
 	

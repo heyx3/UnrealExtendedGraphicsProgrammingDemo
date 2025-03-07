@@ -17,6 +17,10 @@
 			"TargetAllowList": [
 				"Editor"
 			]
+		},
+		{
+			"Name": "GOL_Demo",
+			"Enabled": true
 		}
 	]
 }
