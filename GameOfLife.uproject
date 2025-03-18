@@ -19,6 +19,10 @@
 			]
 		},
 		{
+			"Name": "SnkeGraphicsProgramming",
+			"Enabled": true
+		},
+		{
 			"Name": "GOL_Demo",
 			"Enabled": true
 		}

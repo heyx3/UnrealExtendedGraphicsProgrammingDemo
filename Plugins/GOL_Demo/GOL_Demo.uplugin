@@ -18,7 +18,7 @@
 		{
 			"Name": "GOL_Demo",
 			"Type": "Runtime",
-			"LoadingPhase": "Default"
+			"LoadingPhase": "PostConfigInit"
 		}
 	],
 	"Plugins": [
