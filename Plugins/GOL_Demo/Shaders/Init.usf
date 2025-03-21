@@ -1,7 +1,7 @@
 #include "/Engine/Private/Common.ush"
 
 //Assumes we're using this vertex shader:
- #include "/Engine/Private/ScreenPass.usf"
+//   #include "/Engine/Private/ScreenPass.usf"
 
 float Seed;
 float NoiseScale;
@@ -12,7 +12,7 @@ void Main(in noperspective float4 uvAndScreenPos : TEXCOORD0,
 	//Generate a random initial state.
 	//Unreal's 'Random.ush' gives us a lot of nice PRNG math.
 	#define GOL_NOISE(scale, seed2) \
-		ValueNoise3D_ALU(float3(uvAndScreenPos.xy * NoiseScale * scale, Seed + seed2),   false, 1.0)
+		GradientNoise3D_ALU(float3(uvAndScreenPos.xy * NoiseScale * scale, Seed + seed2),   false, 1.0)
 	newState = (0.75 * GOL_NOISE(1.0, 0.0)) +
 			   (0.20 * GOL_NOISE(2.0, 2.456)) +
 			   (0.05 * GOL_NOISE(4.0, 1.8223));

@@ -1,0 +1,26 @@
+#include "/Engine/Private/Common.ush"
+
+//Assumes we're using this vertex shader:
+//  #include "/Engine/Private/ScreenPass.usf"
+
+Texture2D<float> SimState;
+SamplerState SimSampler;
+uint4 ViewportMinAndSize;
+
+float4 Main(in noperspective float4 uvAndScreenPos : TEXCOORD0,
+			float4 pixelPos : SV_Position
+		   ) : SV_Target0
+{
+	//The UV from the vertex shader only covers the viewport's subset of the screen.
+	//Our sim state texture's entire space covers that subset, so we have to remap the UV's.
+	float2 uv = (pixelPos.xy - float2(ViewportMinAndSize.xy)) / float2(ViewportMinAndSize.zw);
+	
+	float currentState = SimState.SampleLevel(SimSampler, uv, 0);
+
+	float3 gradientCurve = float3(3.0, 1.75, 1.0); //Blueish
+	float effectStrength = 0.8;
+	return float4(
+		lerp(1.0, pow(currentState, gradientCurve), effectStrength),
+		1
+	);
+}

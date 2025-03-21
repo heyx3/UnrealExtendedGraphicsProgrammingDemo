@@ -8,49 +8,22 @@ public class GOL_Demo : ModuleRules
 	{
 		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
 		
-		PublicIncludePaths.AddRange(
-			new string[] {
-				// ... add public include paths required here ...
-			}
-			);
-				
+		//To use post-processing structs we need some "private" engine headers.
+		PrivateIncludePaths.AddRange(new string[] {
+			System.IO.Path.Combine(GetModuleDirectory("Renderer"), "Private"),
+		});
 		
-		PrivateIncludePaths.AddRange(
-			new string[] {
-				// ... add other private include paths required here ...
-			}
-			);
-			
-		
-		PublicDependencyModuleNames.AddRange(
-			new string[]
-			{
-				"Core",
-				"SnkeGraphicsProgramming"
-				// ... add other public dependencies that you statically link with here ...
-			}
-			);
-			
-		
-		PrivateDependencyModuleNames.AddRange(
-			new string[]
-			{
-				"CoreUObject",
-				"Projects",
-				"Engine",
-				"Slate",
-				"SlateCore",
-				"RenderCore", "Renderer", "RHICore", "RHI"
-				// ... add private dependencies that you statically link with here ...	
-			}
-			);
-		
-		
-		DynamicallyLoadedModuleNames.AddRange(
-			new string[]
-			{
-				// ... add any modules that your module loads dynamically here ...
-			}
-			);
+		PublicDependencyModuleNames.AddRange(new string[] {
+			"Core",
+			"SnkeGraphicsProgramming"
+		});
+		PrivateDependencyModuleNames.AddRange(new string[] {
+			"CoreUObject",
+			"Projects",
+			"Engine",
+			"Slate",
+			"SlateCore",
+			"RenderCore", "Renderer", "RHICore", "RHI"
+		});
 	}
 }

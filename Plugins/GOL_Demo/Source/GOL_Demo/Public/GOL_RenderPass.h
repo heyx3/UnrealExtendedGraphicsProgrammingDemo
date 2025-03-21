@@ -41,7 +41,7 @@ public:
 
 protected:
 
-	virtual TSharedRef<FSnkeRenderPassSceneViewExtension> InitThisPass(UWorld& thisWorld) override;
+	virtual TSharedRef<FSnkeRenderPassSceneViewExtension> InitThisPass_GameThread(UWorld& thisWorld) override;
 	virtual void Tick_GameThread(UWorld& thisWorld, float deltaSeconds) override;
 	virtual void Tick_RenderThread(const FSceneInterface& thisScene, float gameThreadDeltaSeconds) override;
 };
@@ -51,11 +51,6 @@ struct GOL_DEMO_API F_GOL_PassSVE : public TSnkeRenderPassSceneViewExtension<U_G
 	//Re-use the parent constructor:
 	using TSnkeRenderPassSceneViewExtension::TSnkeRenderPassSceneViewExtension;
 
-	//Apply our effect immediately after the deferred pass
-	//    and before lighting is computed.
-	virtual void PostRenderBasePassDeferred_RenderThread(
-		FRDGBuilder& graph, FSceneView& view,
-		const FRenderTargetBindingSlots& renderTargets,
-		TRDGUniformBufferRef<FSceneTextureUniformParameters> sceneTextures
-	) override;
+	virtual void PrePostProcessPass_RenderThread(FRDGBuilder& graph, const FSceneView& view,
+												 const FPostProcessingInputs& inputs) override;
 };
