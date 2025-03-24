@@ -3,7 +3,7 @@
 //Assumes we're using this vertex shader:
 //  #include "/Engine/Private/ScreenPass.usf"
 
-Texture2D<float> SimState;
+Texture2D<float2> SimState;
 SamplerState SimSampler;
 uint4 ViewportMinAndSize;
 
@@ -14,13 +14,25 @@ float4 Main(in noperspective float4 uvAndScreenPos : TEXCOORD0,
 	//The UV from the vertex shader only covers the viewport's subset of the screen.
 	//Our sim state texture's entire space covers that subset, so we have to remap the UV's.
 	float2 uv = (pixelPos.xy - float2(ViewportMinAndSize.xy)) / float2(ViewportMinAndSize.zw);
-	
-	float currentState = SimState.SampleLevel(SimSampler, uv, 0);
 
+	//The sim state has two values, X is the official 0/1 state boolean
+	//    and Y is a continuous value animating towards that official state.
+	//The latter provides a more organic visual output.
+	float2 currentState = SimState.SampleLevel(SimSampler, uv, 0);
+
+	float discreteEffectStrength = 0.3,
+		  totalEffectStrength = max(currentState.x, currentState.y);
 	float3 gradientCurve = float3(3.0, 1.75, 1.0); //Blueish
-	float effectStrength = 0.8;
 	return float4(
-		lerp(1.0, pow(currentState, gradientCurve), effectStrength),
+		lerp(
+			1.0,
+			lerp(
+				pow(currentState.y, gradientCurve),
+				currentState.x * float3(1, 0, 0),
+				discreteEffectStrength
+			),
+			totalEffectStrength
+		),
 		1
 	);
 }

@@ -10,7 +10,7 @@
 //An instance of the Game of Life sim, running in one particular viewport.
 struct GOL_DEMO_API FGameOfLifeView final : public FSnkeViewPersistentData
 {
-	static FRHITextureCreateDesc SimStateDesc(const FInt32Point& size);
+	static FRHITextureCreateDesc SimStateDesc(const FInt32Point& viewportSize);
 	TRefCountPtr<FRHITexture2D> SimState, SimBuffer;
 	
 	FGameOfLifeView(FRDGBuilder& graph, const FViewInfo& view, const FIntRect& viewportSubset,
@@ -20,6 +20,20 @@ struct GOL_DEMO_API FGameOfLifeView final : public FSnkeViewPersistentData
 	virtual void Resample(FRDGBuilder& graph, const FViewInfo& view,
 						  const FInt32Point& oldResolution, const FInt32Point& newResolution,
 						  const FInt32Point& offsetDelta) override;
+};
+
+USTRUCT(BlueprintType)
+struct GOL_DEMO_API FGameOfLifeSettings
+{
+	GENERATED_BODY()
+public:
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(ClampMin=0))
+	float OverallSpeed = 2.0f;
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(ClampMin=0))
+	float MinSpeed = 0.3f;
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(ClampMin=0))
+	float AccelerationExponent = 1.0f;
 };
 
 
@@ -37,12 +51,14 @@ public:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere)
 	float NewViewportNoiseScale = 10.0f;
 
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	FGameOfLifeSettings SimSettings;
+
 	TSnkePerViewData<FGameOfLifeView> PerViewData;
 
 protected:
 
 	virtual TSharedRef<FSnkeRenderPassSceneViewExtension> InitThisPass_GameThread(UWorld& thisWorld) override;
-	virtual void Tick_GameThread(UWorld& thisWorld, float deltaSeconds) override;
 	virtual void Tick_RenderThread(const FSceneInterface& thisScene, float gameThreadDeltaSeconds) override;
 };
 

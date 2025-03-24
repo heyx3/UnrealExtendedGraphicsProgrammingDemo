@@ -1,0 +1,95 @@
+#include "/Engine/Private/Common.ush"
+
+//Assumes we're using this vertex shader:
+//  #include "/Engine/Private/ScreenPass.usf"
+
+float DeltaSeconds;
+Texture2D<float2> PreviousState;
+
+float OverallSpeed;
+float MinSpeed;
+float AccelerationExponent;
+
+//Pixel data is normalized (stored between 0 and 1), however the Game of Life is discrete (exactly 0 or 1).
+//So in our sim a cell is counted as alive when its value is above this threshold.
+const float LivingTheshold = 0.5;
+
+
+float2 Main(in noperspective float4 uvAndScreenPos : TEXCOORD0,
+	   	    float4 pixelPos : SV_Position
+	  	   ) : SV_Target0
+{
+	uint2 stateSize;
+	PreviousState.GetDimensions(stateSize.x, stateSize.y);
+	
+	//Sample the neighboring cell states.
+	float2 prevStates[9];
+	int2 ourPixel = int2(pixelPos.xy);
+	const int ourIdx = 4;
+	for (int x = -1; x <= 1; ++x)
+		for (int y = -1; y <= 1; ++y)
+		{
+			int2 globalIdx = ourPixel + int2(x, y);
+			int localIdx = (x + 1) + ((y + 1) * 3);
+			prevStates[localIdx] = any(bool4(globalIdx < 0, globalIdx >= stateSize)) ?
+				float2(0, 0) :
+				PreviousState[globalIdx];
+		}
+
+	//Count the number of living neighbors surrounding us.
+	float neighborStrength = 0;
+	const float maxStrength = 8.0;
+	for (int i = 0; i < 9; ++i)
+		if (i != ourIdx)
+			neighborStrength += prevStates[i].x;
+
+	//Apply the usual Game of Life rules to our cell, dying/living/resurrecting
+	//    based on how many living neighbors we have.
+	//Also calculate a "severity" estimating the strength of the pull towards that value.
+	float targetValue, severityT, speedScale;
+	const float ThresholdTooFew = 2,
+				ThresholdResurrect = 2.5,
+				ThresholdTooMany = 3;
+	if (neighborStrength < ThresholdTooFew)
+	{
+		//Die off, from underpopulation.
+		targetValue = 0;
+		severityT = 1.0 - (neighborStrength / ThresholdTooFew);
+		speedScale = 1.0;
+	}
+	else if (neighborStrength < ThresholdResurrect)
+	{
+		//Maintain current living status, from a normal population.
+		targetValue = prevStates[ourIdx].x;
+		severityT = 1.0;
+		speedScale = 1.0;
+	}
+	else if (neighborStrength <= ThresholdTooMany)
+	{
+		//Come alive, from an ideal population.
+		targetValue = 1;
+		severityT = (neighborStrength - ThresholdResurrect) / max(0.0001, ThresholdTooMany - ThresholdResurrect);
+		speedScale = 1.0;
+	}
+	else
+	{
+		//Die, from overpopulation.
+		targetValue = 0;
+		severityT = (neighborStrength - ThresholdTooMany) / max(0.0001, maxStrength - ThresholdTooMany);
+		speedScale = 1.0;
+	}
+	severityT = pow(saturate(severityT), 1.0 / max(0.00001, AccelerationExponent));
+
+	//Our cell has two state values: the actual, discrete living/dead bool
+	//    and a continuous alternative that moves towards the discrete target.
+	//Now that we know the bool value, update the continuous value accordingly.
+	float smoothValue = prevStates[ourIdx].y;
+	float frameSpeed = DeltaSeconds * max(MinSpeed, speedScale * severityT * OverallSpeed),
+		  frameVelocity = frameSpeed * sign(targetValue - smoothValue);
+	if (distance(smoothValue, targetValue) < frameSpeed)
+		smoothValue = targetValue;
+	else
+		smoothValue += frameVelocity;
+
+	return float2(targetValue, smoothValue);
+}

@@ -7,13 +7,19 @@ float Seed;
 float NoiseScale;
 
 void Main(in noperspective float4 uvAndScreenPos : TEXCOORD0,
-		  out float newState : SV_Target0)
+		  out float2 newState : SV_Target0)
 {
 	//Generate a random initial state.
 	//Unreal's 'Random.ush' gives us a lot of nice PRNG math.
 	#define GOL_NOISE(scale, seed2) \
-		GradientNoise3D_ALU(float3(uvAndScreenPos.xy * NoiseScale * scale, Seed + seed2),   false, 1.0)
-	newState = (0.75 * GOL_NOISE(1.0, 0.0)) +
-			   (0.20 * GOL_NOISE(2.0, 2.456)) +
-			   (0.05 * GOL_NOISE(4.0, 1.8223));
+		GradientNoise3D_ALU(float3( \
+			uvAndScreenPos.xy * NoiseScale * scale, \
+			Seed + seed2 \
+		), false, 1.0)
+	newState.y = (0.75 * GOL_NOISE(1.0, 0.0)) +
+			     (0.20 * GOL_NOISE(2.0, 2.456)) +
+			     (0.05 * GOL_NOISE(4.0, 1.8223));
+
+	//The first channel should be a discrete bool.
+	newState.x = step(0.5, newState.y);
 }
