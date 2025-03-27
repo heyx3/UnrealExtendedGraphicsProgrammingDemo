@@ -35,7 +35,7 @@ void Main(uint3 threadIdx : SV_DispatchThreadID)
 	const float ThresholdTooFew = matOutputs.x,
 				ThresholdResurrect = matOutputs.y,
 				ThresholdTooMany = matOutputs.z;
-	const float OverallSpeed = 1.0;
+	const float OverallSpeed = 0.3;
 	
 	//Sample the neighboring cell states.
 	float2 prevStates[9];
