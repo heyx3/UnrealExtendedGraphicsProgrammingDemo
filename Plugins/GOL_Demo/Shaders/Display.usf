@@ -1,38 +1,19 @@
-#include "/Engine/Private/Common.ush"
+#include "/SnkeOS/ScreenPass/pre.ush"
 
-//Assumes we're using this vertex shader:
-//  #include "/Engine/Private/ScreenPass.usf"
+//Hint to Materials which shader we're running in.
+#define GOL_PASS_DISPLAY 1
 
-Texture2D<float2> SimState;
-SamplerState SimSampler;
-uint4 ViewportMinAndSize;
+#include "/SnkeOS/ScreenPass/post.ush"
 
-float4 Main(in noperspective float4 uvAndScreenPos : TEXCOORD0,
-			float4 pixelPos : SV_Position
-		   ) : SV_Target0
+
+float4 Main(in FTexCoordsVSToPS materialInterpolants,
+	  	    in float4 svPos : SV_Position) : SV_Target0
 {
-	//The UV from the vertex shader only covers the viewport's subset of the screen.
-	//Our sim state texture's entire space covers that subset, so we have to remap the UV's.
-	float2 uv = (pixelPos.xy - float2(ViewportMinAndSize.xy)) / float2(ViewportMinAndSize.zw);
+	//Set up the Material code.
+	FPixelMaterialInputs matInputs;
+	FMaterialPixelParameters matParams;
+	ScreenPassSetupPS(svPos, materialInterpolants, matInputs, matParams);
 
-	//The sim state has two values, X is the official 0/1 state boolean
-	//    and Y is a continuous value animating towards that official state.
-	//The latter provides a more organic visual output.
-	float2 currentState = SimState.SampleLevel(SimSampler, uv, 0);
-
-	float discreteEffectStrength = 0.3,
-		  totalEffectStrength = max(currentState.x, currentState.y);
-	float3 gradientCurve = float3(3.0, 1.75, 1.0); //Blueish
-	return float4(
-		lerp(
-			1.0,
-			lerp(
-				pow(currentState.y, gradientCurve),
-				currentState.x * float3(1, 0, 0),
-				discreteEffectStrength
-			),
-			totalEffectStrength
-		),
-		1
-	);
+	//Let the user decide how to sample and display the effect.
+	return float4(GetMaterialEmissive(matInputs), 1.0);
 }

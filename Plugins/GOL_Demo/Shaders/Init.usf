@@ -1,25 +1,23 @@
-#include "/Engine/Private/Common.ush"
+#include "/SnkeOS/ScreenPass/pre.ush"
 
-//Assumes we're using this vertex shader:
-//   #include "/Engine/Private/ScreenPass.usf"
+//Hint to Materials which shader we're running in.
+#define GOL_PASS_INIT 1
 
-float Seed;
-float NoiseScale;
+#include "/SnkeOS/ScreenPass/post.ush"
 
-void Main(in noperspective float4 uvAndScreenPos : TEXCOORD0,
+
+void Main(in FTexCoordsVSToPS materialInterpolants,
+		  in float4 svPos : SV_Position,
 		  out float2 newState : SV_Target0)
 {
-	//Generate a random initial state.
-	//Unreal's 'Random.ush' gives us a lot of nice PRNG math.
-	#define GOL_NOISE(scale, seed2) \
-		GradientNoise3D_ALU(float3( \
-			uvAndScreenPos.xy * NoiseScale * scale, \
-			Seed + seed2 \
-		), false, 1.0)
-	newState.y = (0.75 * GOL_NOISE(1.0, 0.0)) +
-			     (0.20 * GOL_NOISE(2.0, 2.456)) +
-			     (0.05 * GOL_NOISE(4.0, 1.8223));
+	//Set up the Material code.
+	FPixelMaterialInputs matInputs;
+	FMaterialPixelParameters matParams;
+	ScreenPassSetupPS(svPos, materialInterpolants, matInputs, matParams);
 
-	//The first channel should be a discrete bool.
+	//Read the starting state from the Material, through its emissive color pin.
+	newState.xy = GetMaterialEmissive(matInputs).rg;
+
+	//The first channel is supposed to be a discrete bool.
 	newState.x = step(0.5, newState.y);
 }

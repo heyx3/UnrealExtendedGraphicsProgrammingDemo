@@ -1,6 +1,7 @@
 #include "GOL_RenderPass.h"
 
 #include "RenderGraphUtils.h"
+#include "SnkePostProcessMaterialShaders.h"
 #include "Runtime/Renderer/Private/PostProcess/PostProcessing.h"
 
 
@@ -22,22 +23,22 @@ FRHITextureCreateDesc FGameOfLifeView::SimStateDesc(const FInt32Point& viewportS
 
 #pragma region Initialize the sim state for new viewports
 
-struct FGoLInitializePS : public FGlobalShader
+struct FGoLInitializePS : public Snke::FScreenSpaceShader
 {
-	DECLARE_GLOBAL_SHADER(FGoLInitializePS);
+	DECLARE_EXPORTED_SHADER_TYPE(FGoLInitializePS, Material, )
 
 	BEGIN_SHADER_PARAMETER_STRUCT(FParameters, )
-		SHADER_PARAMETER(float, Seed)
-		SHADER_PARAMETER(float, NoiseScale)
+		SNKE_SCREEN_SPACE_PASS_MATERIAL_DATA()
 		RENDER_TARGET_BINDING_SLOTS()
 	END_SHADER_PARAMETER_STRUCT()
-	SHADER_USE_PARAMETER_STRUCT(FGoLInitializePS, FGlobalShader)
+	SHADER_USE_PARAMETER_STRUCT_WITH_LEGACY_BASE(FGoLInitializePS, Snke::FScreenSpaceShader)
 };
 
-IMPLEMENT_GLOBAL_SHADER(FGoLInitializePS, "/GameOfLife/Init.usf", "Main", SF_Pixel);
+IMPLEMENT_MATERIAL_SHADER_TYPE(, FGoLInitializePS, TEXT("/GameOfLife/Init.usf"), TEXT("Main"), SF_Pixel);
 
 FGameOfLifeView::FGameOfLifeView(FRDGBuilder& graph, const FViewInfo& view, const FIntRect& viewportSubset,
-								 float seed, float noiseScale)
+							     const UMaterialInterface* initShaderMaterial,
+							     const FSceneTextureShaderParameters& sceneTextures)
 	: FSnkeViewPersistentData(graph, view, viewportSubset)
 {
 	auto desc = SimStateDesc(viewportSubset.Size());
@@ -47,15 +48,19 @@ FGameOfLifeView::FGameOfLifeView(FRDGBuilder& graph, const FViewInfo& view, cons
 	//Initialize the sim state using our pixel shader.
 	auto simStateRDG = RegisterExternalTexture(graph, SimState, TEXT("GoL_InitialState"));
 	auto* initShaderParams = graph.AllocParameters<FGoLInitializePS::FParameters>();
-	initShaderParams->Seed = seed;
-	initShaderParams->NoiseScale = noiseScale;
 	initShaderParams->RenderTargets[0] = { simStateRDG, ERenderTargetLoadAction::ENoAction };
-	AddDrawScreenPass(
-		graph, RDG_EVENT_NAME("GoL_Initialize"), view,
-		FScreenPassTextureViewport{ simStateRDG },
-		FScreenPassTextureViewport{ simStateRDG->Desc.Extent },
-		TShaderMapRef<FGoLInitializePS>{ view.ShaderMap },
-		initShaderParams
+	Snke::FScreenSpacePassMaterialInputs postProcessMaterialInputs;
+	postProcessMaterialInputs.SceneTextures = sceneTextures;
+	postProcessMaterialInputs.TargetView = &view;
+	postProcessMaterialInputs.OutputViewportData = FScreenPassTextureViewport{ simStateRDG };
+	postProcessMaterialInputs.InputViewportData = FScreenPassTextureViewport{ view.ViewRect };
+	Snke::AddScreenSpaceRenderPass<Snke::FScreenSpaceRenderVS, FGoLInitializePS>(
+		graph, RDG_EVENT_NAME("GoL_Initialize"),
+		postProcessMaterialInputs,
+		Snke::FScreenSpacePassRenderState{ }, //Default to opaque blending and no depth/stencil usage
+		initShaderParams, initShaderMaterial,
+		//Extract the specific param structs for each shader:
+		&initShaderParams->ScreenSpacePassData, initShaderParams
 	);
 }
 
@@ -117,45 +122,46 @@ void FGameOfLifeView::Resample(FRDGBuilder& graph, const FViewInfo& view,
 
 #pragma region Display the sim state as a post-process
 
-struct FGoLDisplayPS : public FGlobalShader
+struct FGoLDisplayPS : public Snke::FScreenSpaceShader
 {
-	DECLARE_GLOBAL_SHADER(FGoLDisplayPS);
+	DECLARE_EXPORTED_SHADER_TYPE(FGoLDisplayPS, Material, )
 
 	BEGIN_SHADER_PARAMETER_STRUCT(FParameters, )
-		SHADER_PARAMETER_RDG_TEXTURE_SRV(Texture2D<float2>, SimState)
-		SHADER_PARAMETER_SAMPLER(SamplerState, SimSampler)
-		//To calculate UV's in 0-1 space rather than the viewport's sub-set of 0-1 space:
-		SHADER_PARAMETER(FUint32Vector4, ViewportMinAndSize)
+		SNKE_SCREEN_SPACE_PASS_MATERIAL_DATA()
 		RENDER_TARGET_BINDING_SLOTS()
 	END_SHADER_PARAMETER_STRUCT()
-	SHADER_USE_PARAMETER_STRUCT(FGoLDisplayPS, FGlobalShader)
+	SHADER_USE_PARAMETER_STRUCT_WITH_LEGACY_BASE(FGoLDisplayPS, Snke::FScreenSpaceShader)
 };
 
-IMPLEMENT_GLOBAL_SHADER(FGoLDisplayPS, "/GameOfLife/Display.usf", "Main", SF_Pixel);
+IMPLEMENT_MATERIAL_SHADER_TYPE(, FGoLDisplayPS, TEXT("/GameOfLife/Display.usf"), TEXT("Main"), SF_Pixel);
 
 static void RenderGoLState(FRDGBuilder& graph, const FViewInfo& view,
 						   FRDGTextureRef simStateTex,
 						   FRHIBlendState* blending,
-						   const FRenderTargetBinding& output)
+						   const FRenderTargetBinding& output,
+						   const UMaterialInterface* material,
+						   const FSceneTextureShaderParameters& sceneTextures)
 {
 	auto* params = graph.AllocParameters<FGoLDisplayPS::FParameters>();
-	params->SimState = graph.CreateSRV(FRDGTextureSRVDesc{ simStateTex });
-	params->SimSampler = TStaticSamplerState<SF_Bilinear, AM_Clamp, AM_Clamp>::GetRHI();
-	params->ViewportMinAndSize = FUint32Vector4(
-		view.ViewRect.Min.X, view.ViewRect.Min.Y,
-		view.ViewRect.Width(), view.ViewRect.Height()
-	);
-	
 	params->RenderTargets[0] = output;
+
+	//Configure the standard post-process Material inputs for this pass:
+	Snke::FScreenSpacePassMaterialInputs inputs;
+	inputs.Textures[0] = GetScreenPassTextureInput(
+		FScreenPassTexture{ simStateTex },
+		TStaticSamplerState<SF_Bilinear, AM_Clamp, AM_Clamp>::GetRHI()
+	);
+	inputs.SceneTextures = sceneTextures;
+	inputs.TargetView = &view;
+	inputs.InputViewportData = FScreenPassTextureViewport{ inputs.Textures[0].Texture };
+	inputs.OutputViewportData = FScreenPassTextureViewport{ output.GetTexture(), view.ViewRect };
 	
-	AddDrawScreenPass(
-		graph, RDG_EVENT_NAME("GoL_Display"), view,
-		FScreenPassTextureViewport{ output.GetTexture() },
-		FScreenPassTextureViewport{ simStateTex },
-		TShaderMapRef<FScreenPassVS>{ view.ShaderMap }, //The usual screen-pass VS; this overload takes it explicitly
-		TShaderMapRef<FGoLDisplayPS>{ view.ShaderMap },
-		blending,
-		params
+	Snke::AddScreenSpaceRenderPass<Snke::FScreenSpaceRenderVS, FGoLDisplayPS>(
+		graph, RDG_EVENT_NAME("GoL_Display"), inputs,
+		Snke::FScreenSpacePassRenderState{ blending },
+		params, material,
+		//Extract the specific param structs for each shader:
+		&params->ScreenSpacePassData, params
 	);
 }
 
@@ -163,50 +169,60 @@ static void RenderGoLState(FRDGBuilder& graph, const FViewInfo& view,
 
 #pragma region Tick the sim state
 
-struct FGoLSimulatePS : public FGlobalShader
+struct FGoLSimulateCS : public Snke::FSimulationShader
 {
-	DECLARE_GLOBAL_SHADER(FGoLSimulatePS);
+	DECLARE_EXPORTED_SHADER_TYPE(FGoLSimulateCS, Material, );
+	static FIntVector3 GroupSize() { return { 8, 8, 1 }; }
 
 	BEGIN_SHADER_PARAMETER_STRUCT(FParameters, )
-		SHADER_PARAMETER_RDG_TEXTURE_SRV(Texture2D<float2>, PreviousState)
 		SHADER_PARAMETER(float, DeltaSeconds)
-
-		//Sim control parameters:
-		SHADER_PARAMETER(float, OverallSpeed)
-		SHADER_PARAMETER(float, MinSpeed)
-		SHADER_PARAMETER(float, AccelerationExponent)
-	
-		RENDER_TARGET_BINDING_SLOTS()
+		SHADER_PARAMETER_RDG_TEXTURE_UAV(RWTexture2D<float2>, NextSimStateTex)
+		SNKE_SIMULATION_PASS_MATERIAL_DATA()
 	END_SHADER_PARAMETER_STRUCT()
-	SHADER_USE_PARAMETER_STRUCT(FGoLSimulatePS, FGlobalShader)
+	SHADER_USE_PARAMETER_STRUCT_WITH_LEGACY_BASE(FGoLSimulateCS, Snke::FSimulationShader)
+
+	//Feed the group size to the shader so that it's only defined in one place.
+	static void ModifyCompilationEnvironment(const FMaterialShaderPermutationParameters& params,
+											 FShaderCompilerEnvironment& env)
+	{
+		Snke::FSimulationShader::ModifyCompilationEnvironment(params, env);
+		env.SetDefine(TEXT("SIM_GROUP_SIZE_X"), GroupSize().X);
+		env.SetDefine(TEXT("SIM_GROUP_SIZE_Y"), GroupSize().Y);
+		env.SetDefine(TEXT("SIM_GROUP_SIZE_Z"), GroupSize().Z);
+	}
 };
 
-IMPLEMENT_GLOBAL_SHADER(FGoLSimulatePS, "/GameOfLife/Simulate.usf", "Main", SF_Pixel);
+IMPLEMENT_MATERIAL_SHADER_TYPE(, FGoLSimulateCS, TEXT("/GameOfLife/Simulate.usf"), TEXT("Main"), SF_Compute);
 
-static void UpdateGoLState(FRDGBuilder& graph, ERHIFeatureLevel::Type featureLevel,
+static void UpdateGoLState(FRDGBuilder& graph, const FViewInfo& view,
 						   FRDGTextureRef currentSimState, FRDGTextureRef nextSimState,
 						   float deltaSeconds,
-						   const FGameOfLifeSettings& settings)
+						   const UMaterialInterface* uMaterial)
 {
-	//The shader assumes input and output are the same size.
 	check(currentSimState->Desc.Extent == nextSimState->Desc.Extent);
-	auto* shaderMap = GetGlobalShaderMap(featureLevel);
 	
-	auto* params = graph.AllocParameters<FGoLSimulatePS::FParameters>();
-	params->PreviousState = graph.CreateSRV(FRDGTextureSRVDesc{ currentSimState });
-	params->DeltaSeconds = deltaSeconds;
-	params->OverallSpeed = settings.OverallSpeed;
-	params->MinSpeed = settings.MinSpeed;
-	params->AccelerationExponent = settings.AccelerationExponent;
-	params->RenderTargets[0] = { nextSimState, ERenderTargetLoadAction::ENoAction };
-
-	AddDrawScreenPass(
-		graph, RDG_EVENT_NAME("GoL_Tick"), featureLevel,
-		FScreenPassTextureViewport{ nextSimState },
-		FScreenPassTextureViewport{ nextSimState->Desc.Extent },
-		TShaderMapRef<FGoLSimulatePS>{ shaderMap },
-		params
+	//Provide the previous state to the material graph as Post-Process Texture 0.
+	Snke::FSimulationPassMaterialInputs inputs;
+	inputs.Textures[0] = GetScreenPassTextureInput(
+		FScreenPassTexture{ currentSimState },
+		TStaticSamplerState<SF_Bilinear, AM_Clamp, AM_Clamp>::GetRHI()
 	);
+
+	//Set up the other, non-Material shader params.
+	auto* params = graph.AllocParameters<FGoLSimulateCS::FParameters>();
+	params->DeltaSeconds = deltaSeconds;
+	params->NextSimStateTex = graph.CreateUAV(nextSimState);
+
+	//Compute the group count for this dispatch.
+	Snke::FSimulationPassState state;
+	state.GroupCount.Set<FIntVector3>(FComputeShaderUtils::GetGroupCount(
+		FIntVector3{ currentSimState->Desc.Extent.X, currentSimState->Desc.Extent.Y, 1 },
+		FGoLSimulateCS::GroupSize()
+	));
+
+	Snke::AddSimulationMaterialPass<FGoLSimulateCS>(graph, RDG_EVENT_NAME("GoL_Tick"),
+												    inputs, state, view,
+												    params, uMaterial);
 }
 
 #pragma endregion
@@ -215,7 +231,18 @@ TSharedRef<FSnkeRenderPassSceneViewExtension> U_GOL_RenderPass::InitThisPass_Gam
 {
 	return FSceneViewExtensions::NewExtension<F_GOL_PassSVE>(this);
 }
+void U_GOL_RenderPass::Tick_GameThread(UWorld& thisWorld, float deltaSeconds)
+{
+	Super::Tick_GameThread(thisWorld, deltaSeconds);
 
+	//Update render-thread copies of our parameters.
+	auto* matIn = EffectMaterial;
+	auto* matOut = &effectMaterial_RenderThread;
+	ENQUEUE_RENDER_COMMAND(UpdateGoLParams)([matIn, matOut](FRHICommandList& cmds)
+	{
+		*matOut = matIn;
+	});
+}
 void U_GOL_RenderPass::Tick_RenderThread(const FSceneInterface& thisScene, float gameThreadDeltaSeconds)
 {
 	Super::Tick_RenderThread(thisScene, gameThreadDeltaSeconds);
@@ -224,17 +251,8 @@ void U_GOL_RenderPass::Tick_RenderThread(const FSceneInterface& thisScene, float
 	//Run our "simulate" shader on all viewports.
 	FRDGBuilder graph{ FRHICommandListImmediate::Get(), RDG_EVENT_NAME("UpdateAllGoLViewports") };
 	//Make a render-thread copy of the sim settings.
-	//For now this struct is POD (and the contents are cosmetic) so there's no serious risk of race conditions.
-	auto simSettings = SimSettings;
 	PerViewData.ForEachView([&](int viewID, FGameOfLifeView& view, ERHIFeatureLevel::Type featureLevel) {
-		UpdateGoLState(
-			graph, featureLevel,
-			RegisterExternalTexture(graph, view.SimState, TEXT("GoL_PrevState")),
-			RegisterExternalTexture(graph, view.SimBuffer, TEXT("GoL_NextState")),
-			gameThreadDeltaSeconds,
-			simSettings
-		);
-		std::swap(view.SimBuffer, view.SimState);
+		view.NextTickTime += gameThreadDeltaSeconds;
 	});
 	graph.Execute();
 }
@@ -244,25 +262,38 @@ void F_GOL_PassSVE::PrePostProcessPass_RenderThread(FRDGBuilder& graph, const FS
 {
 	check(_view.bIsViewInfo);
 	auto& view = reinterpret_cast<const FViewInfo&>(_view);
+	auto* passMaterial = Pass->GetEffectMaterial_RenderThread();
 	
 	//Get or create the per-view data.
 	auto& viewData = Pass->PerViewData.DataForView(
-	graph, view,
-		//If this is the first time encountering this view,
-		//    the below arguments go into its constructor.
-		//Dereferencing the Pass object within its SVE is OK!
-		//Using game-thread-accessible data from the render-thread is also OK
-		//    because they’re just cosmetic floats!
-		Pass->NewViewportSeed, Pass->NewViewportNoiseScale
+		graph, view,
+		//For new views, the view data constructor arguments:
+		passMaterial, GetSceneTextureShaderParameters(inputs.SceneTextures)
 	);
 	auto simStateRDG = RegisterExternalTexture(graph, viewData.SimState, TEXT("GoL_State"));
 
+	//If some time has passed on the game thread, tick this viewport's sim.
+	if (viewData.NextTickTime > 0)
+	{
+		auto nextSimStateRDG = RegisterExternalTexture(graph, viewData.SimBuffer, TEXT("GoL_NextState"));
+		UpdateGoLState(
+			graph, view,
+			simStateRDG, nextSimStateRDG,
+			viewData.NextTickTime, passMaterial
+		);
+		std::swap(viewData.SimBuffer, viewData.SimState);
+		simStateRDG = nextSimStateRDG;
+		viewData.NextTickTime = 0;
+	}
+	
 	//Draw onto the scene color texture.
 	RenderGoLState(
 		graph, view, simStateRDG,
 		//Use multiplicative blending.
 		TStaticBlendState<CW_RGBA, BO_Add, BF_DestColor, BF_Zero>::GetRHI(),
 		//Blend on top of the current scene color, so make sure its existing contents are Loaded when bound.
-		{ inputs.SceneTextures->GetContents()->SceneColorTexture, ERenderTargetLoadAction::ELoad }
+		{ inputs.SceneTextures->GetContents()->SceneColorTexture, ERenderTargetLoadAction::ELoad },
+		passMaterial,
+		GetSceneTextureShaderParameters(inputs.SceneTextures)
 	);
 }

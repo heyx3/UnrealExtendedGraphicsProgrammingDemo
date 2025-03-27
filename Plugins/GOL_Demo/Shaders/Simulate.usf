@@ -1,39 +1,53 @@
-#include "/Engine/Private/Common.ush"
+#include "/SnkeOS/ScreenPass/pre.ush"
 
-//Assumes we're using this vertex shader:
-//  #include "/Engine/Private/ScreenPass.usf"
+//Hint to Materials which shader we're running in.
+#define GOL_PASS_SIMULATE 1
+
+#include "/SnkeOS/ScreenPass/post.ush"
+
 
 float DeltaSeconds;
-Texture2D<float2> PreviousState;
+#define SimStateTex PostProcessInput_0_Texture
+RWTexture2D<float2> NextSimStateTex;
 
-float OverallSpeed;
-float MinSpeed;
-float AccelerationExponent;
-
-//Pixel data is normalized (stored between 0 and 1), however the Game of Life is discrete (exactly 0 or 1).
-//So in our sim a cell is counted as alive when its value is above this threshold.
-const float LivingTheshold = 0.5;
-
-
-float2 Main(in noperspective float4 uvAndScreenPos : TEXCOORD0,
-	   	    float4 pixelPos : SV_Position
-	  	   ) : SV_Target0
+[numthreads(SIM_GROUP_SIZE_X, SIM_GROUP_SIZE_Y, SIM_GROUP_SIZE_Z)]
+void Main(uint3 threadIdx : SV_DispatchThreadID)
 {
-	uint2 stateSize;
-	PreviousState.GetDimensions(stateSize.x, stateSize.y);
+	uint2 resolution;
+	SimStateTex.GetDimensions(resolution.x, resolution.y);
+
+	uint2 pixel = threadIdx.xy;
+	float2 uv = (float2(pixel) + 0.5) / float2(resolution);
+	if (any(pixel >= resolution))
+		return;
+	
+	//Set up the Material code.
+	FPixelMaterialInputs matInputs;
+	FMaterialPixelParameters matParams;
+	ScreenPassSetupCS(pixel, uv,
+					  //Fake "world pos" and "fragment depth":
+					  float3((uv * 2) - 1, 0), 0.0,
+					  matInputs, matParams);
+
+	//Query the GoL rules from the Material,
+	//    interpreting its four Emissive outputs as various living/dying thresholds.
+	float3 matOutputs = GetMaterialEmissive(matInputs);
+	const float ThresholdTooFew = matOutputs.x,
+				ThresholdResurrect = matOutputs.y,
+				ThresholdTooMany = matOutputs.z;
+	const float OverallSpeed = 1.0;
 	
 	//Sample the neighboring cell states.
 	float2 prevStates[9];
-	int2 ourPixel = int2(pixelPos.xy);
 	const int ourIdx = 4;
 	for (int x = -1; x <= 1; ++x)
 		for (int y = -1; y <= 1; ++y)
 		{
-			int2 globalIdx = ourPixel + int2(x, y);
+			int2 globalIdx = pixel + int2(x, y);
 			int localIdx = (x + 1) + ((y + 1) * 3);
-			prevStates[localIdx] = any(bool4(globalIdx < 0, globalIdx >= stateSize)) ?
+			prevStates[localIdx] = any(bool4(globalIdx < 0, globalIdx >= resolution)) ?
 				float2(0, 0) :
-				PreviousState[globalIdx];
+				SimStateTex[globalIdx].xy;
 		}
 
 	//Count the number of living neighbors surrounding us.
@@ -47,9 +61,6 @@ float2 Main(in noperspective float4 uvAndScreenPos : TEXCOORD0,
 	//    based on how many living neighbors we have.
 	//Also calculate a "severity" estimating the strength of the pull towards that value.
 	float targetValue, severityT, speedScale;
-	const float ThresholdTooFew = 2,
-				ThresholdResurrect = 2.5,
-				ThresholdTooMany = 3;
 	if (neighborStrength < ThresholdTooFew)
 	{
 		//Die off, from underpopulation.
@@ -78,18 +89,17 @@ float2 Main(in noperspective float4 uvAndScreenPos : TEXCOORD0,
 		severityT = (neighborStrength - ThresholdTooMany) / max(0.0001, maxStrength - ThresholdTooMany);
 		speedScale = 1.0;
 	}
-	severityT = pow(saturate(severityT), 1.0 / max(0.00001, AccelerationExponent));
 
 	//Our cell has two state values: the actual, discrete living/dead bool
 	//    and a continuous alternative that moves towards the discrete target.
 	//Now that we know the bool value, update the continuous value accordingly.
 	float smoothValue = prevStates[ourIdx].y;
-	float frameSpeed = DeltaSeconds * max(MinSpeed, speedScale * severityT * OverallSpeed),
+	float frameSpeed = DeltaSeconds * max(OverallSpeed * 0.05, speedScale * severityT * OverallSpeed),
 		  frameVelocity = frameSpeed * sign(targetValue - smoothValue);
 	if (distance(smoothValue, targetValue) < frameSpeed)
 		smoothValue = targetValue;
 	else
 		smoothValue += frameVelocity;
 
-	return float2(targetValue, smoothValue);
+	NextSimStateTex[pixel] = float2(targetValue, smoothValue);
 }

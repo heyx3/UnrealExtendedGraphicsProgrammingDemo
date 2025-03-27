@@ -12,28 +12,18 @@ struct GOL_DEMO_API FGameOfLifeView final : public FSnkeViewPersistentData
 {
 	static FRHITextureCreateDesc SimStateDesc(const FInt32Point& viewportSize);
 	TRefCountPtr<FRHITexture2D> SimState, SimBuffer;
+
+	float NextTickTime = 0;
+	
 	
 	FGameOfLifeView(FRDGBuilder& graph, const FViewInfo& view, const FIntRect& viewportSubset,
-					float seed, float noiseScale);
+					const UMaterialInterface* initShaderMaterial,
+					const FSceneTextureShaderParameters& sceneTextures);
 	//Moves and destructor are handled automatically thanks to the ref-counted pointer.
 
 	virtual void Resample(FRDGBuilder& graph, const FViewInfo& view,
 						  const FInt32Point& oldResolution, const FInt32Point& newResolution,
 						  const FInt32Point& offsetDelta) override;
-};
-
-USTRUCT(BlueprintType)
-struct GOL_DEMO_API FGameOfLifeSettings
-{
-	GENERATED_BODY()
-public:
-
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(ClampMin=0))
-	float OverallSpeed = 2.0f;
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(ClampMin=0))
-	float MinSpeed = 0.3f;
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(ClampMin=0))
-	float AccelerationExponent = 1.0f;
 };
 
 
@@ -43,23 +33,22 @@ class GOL_DEMO_API U_GOL_RenderPass : public USnkeRenderPass
 	GENERATED_BODY()
 public:
 
-	//Seed that's used when initializing the sim for a new viewport.
 	UPROPERTY(BlueprintReadWrite, EditAnywhere)
-	float NewViewportSeed = 1.432;
-	
-	//The size of the details on-screen in a new initialized viewport.
-	UPROPERTY(BlueprintReadWrite, EditAnywhere)
-	float NewViewportNoiseScale = 10.0f;
-
-	UPROPERTY(BlueprintReadWrite, EditAnywhere)
-	FGameOfLifeSettings SimSettings;
+	UMaterialInterface* EffectMaterial = nullptr;
+	UMaterialInterface* GetEffectMaterial_RenderThread() const { check(IsInRenderingThread()); return effectMaterial_RenderThread; }
 
 	TSnkePerViewData<FGameOfLifeView> PerViewData;
 
 protected:
 
 	virtual TSharedRef<FSnkeRenderPassSceneViewExtension> InitThisPass_GameThread(UWorld& thisWorld) override;
+	virtual void Tick_GameThread(UWorld& thisWorld, float deltaSeconds) override;
 	virtual void Tick_RenderThread(const FSceneInterface& thisScene, float gameThreadDeltaSeconds) override;
+
+private:
+
+	// ReSharper disable once CppUE4ProbableMemoryIssuesWithUObject
+	UMaterialInterface* effectMaterial_RenderThread = nullptr;
 };
 
 struct GOL_DEMO_API F_GOL_PassSVE : public TSnkeRenderPassSceneViewExtension<U_GOL_RenderPass>
