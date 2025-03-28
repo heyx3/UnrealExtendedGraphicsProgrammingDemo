@@ -12,9 +12,8 @@ struct GOL_DEMO_API FGameOfLifeView final : public FSnkeViewPersistentData
 {
 	static FRHITextureCreateDesc SimStateDesc(const FInt32Point& viewportSize);
 	TRefCountPtr<FRHITexture2D> SimState, SimBuffer;
-
+ 
 	float NextTickTime = 0;
-	
 	
 	FGameOfLifeView(FRDGBuilder& graph, const FViewInfo& view, const FIntRect& viewportSubset,
 					const UMaterialInterface* initShaderMaterial,

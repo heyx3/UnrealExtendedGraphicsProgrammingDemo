@@ -5,6 +5,11 @@
 
 #include "/SnkeOS/ScreenPass/post.ush"
 
+//To get intellisense to understand generated Material code, use this little snippet.
+#if defined(__INTELLISENSE__) || defined(__RESHARPER__)
+	#include "/Engine/Private/MaterialTemplate.ush"
+#endif
+
 
 void Main(in FTexCoordsVSToPS materialInterpolants,
 		  in float4 svPos : SV_Position,

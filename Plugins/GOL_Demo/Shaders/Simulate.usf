@@ -30,7 +30,7 @@ void Main(uint3 threadIdx : SV_DispatchThreadID)
 					  matInputs, matParams);
 
 	//Query the GoL rules from the Material,
-	//    interpreting its four Emissive outputs as various living/dying thresholds.
+	//    interpreting its three Emissive outputs as various living/dying thresholds.
 	float3 matOutputs = GetMaterialEmissive(matInputs);
 	const float ThresholdTooFew = matOutputs.x,
 				ThresholdResurrect = matOutputs.y,
