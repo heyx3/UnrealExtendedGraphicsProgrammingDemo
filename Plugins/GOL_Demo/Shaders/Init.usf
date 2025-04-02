@@ -8,6 +8,9 @@
 //To get intellisense to understand generated Material code, use this little snippet.
 #if defined(__INTELLISENSE__) || defined(__RESHARPER__)
 	#include "/Engine/Private/MaterialTemplate.ush"
+
+	#define HAVE_GoL_Outputs_Init_0   1
+	#define HAVE_GoL_Outputs_Init_1   1
 #endif
 
 
@@ -20,9 +23,24 @@ void Main(in FTexCoordsVSToPS materialInterpolants,
 	FMaterialPixelParameters matParams;
 	ScreenPassSetupPS(svPos, materialInterpolants, matInputs, matParams);
 
-	//Read the starting state from the Material, through its emissive color pin.
-	newState.xy = GetMaterialEmissive(matInputs).rg;
-
-	//The first channel is supposed to be a discrete bool.
-	newState.x = step(0.5, newState.y);
+	//Read the starting state from the Material.
+	//  1. The "discrete state" output must exist.
+	#if HAVE_GoL_Outputs_Init_0
+		newState.x = GoL_Outputs_Init_0(matParams);
+	#else
+	    //Unrelated post-process Materials will compile without this output pin,
+	    //    so it's not really an error.
+		//Just use a dummy value.
+		newState.x = 0;
+	#endif
+	//  2. The "continuous state" output defaults to the discrete one.
+	#if HAVE_GoL_Outputs_Init_1
+		newState.y = HAVE_GoL_Outputs_Init_1(matParams);
+	#else
+	    newState.y = newState.x;
+	#endif
+	
+	//Fix the starting state to always contain legal values.
+	newState.x = step(0.5, SafeSaturate(newState.x));
+	newState.y = SafeSaturate(newState.y);
 }

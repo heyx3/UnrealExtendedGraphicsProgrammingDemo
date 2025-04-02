@@ -3,6 +3,13 @@
 //Hint to Materials which shader we're running in.
 #define GOL_PASS_SIMULATE 1
 
+//Stage 1:
+static float MaterialDeltaSeconds;
+static float2 MaterialNeighborStates[9];
+//Stage 2:
+static float MaterialNewDiscreteValue;
+static float MaterialDiscreteSeverityT;
+
 #include "/SnkeOS/ScreenPass/post.ush"
 
 
@@ -21,22 +28,6 @@ void Main(uint3 threadIdx : SV_DispatchThreadID)
 	if (any(pixel >= resolution))
 		return;
 	
-	//Set up the Material code.
-	FPixelMaterialInputs matInputs;
-	FMaterialPixelParameters matParams;
-	ScreenPassSetupCS(pixel, uv,
-					  //Fake "world pos" and "fragment depth":
-					  float3((uv * 2) - 1, 0), 0.0,
-					  matInputs, matParams);
-
-	//Query the GoL rules from the Material,
-	//    interpreting its three Emissive outputs as various living/dying thresholds.
-	float3 matOutputs = GetMaterialEmissive(matInputs);
-	const float ThresholdTooFew = matOutputs.x,
-				ThresholdResurrect = matOutputs.y,
-				ThresholdTooMany = matOutputs.z;
-	const float OverallSpeed = 0.3;
-	
 	//Sample the neighboring cell states.
 	float2 prevStates[9];
 	const int ourIdx = 4;
@@ -50,56 +41,84 @@ void Main(uint3 threadIdx : SV_DispatchThreadID)
 				SimStateTex[globalIdx].xy;
 		}
 
+	//Set up the Material code.
+	FPixelMaterialInputs matInputs;
+	FMaterialPixelParameters matParams;
+	ScreenPassSetupCS(pixel, uv,
+					  //Fake "world pos" and "fragment depth":
+					  float3((uv * 2) - 1, 0), 0.0,
+					  matInputs, matParams);
+
+	//Run stage 1 of the Material graph's logic.
+	MaterialDeltaSeconds = DeltaSeconds;
+	for (int i = 0; i < 9; ++i)
+		MaterialNeighborStates[i] = prevStates[i];
+	float thresholdTooFew =
+		#if HAVE_GoL_Outputs_Simulate_Pt1_0
+			GoL_Outputs_Simulate_Pt1_0(matParams)
+		#else
+			2.0
+		#endif
+	;
+	float thresholdResurrect =
+		#if HAVE_GoL_Outputs_Simulate_Pt1_1
+			GoL_Outputs_Simulate_Pt1_1(matParams)
+		#else
+			2.5
+		#endif
+	;
+	float thresholdTooMany =
+		#if HAVE_GoL_Outputs_Simulate_Pt1_2
+			GoL_Outputs_Simulate_Pt1_2(matParams)
+		#else
+			3
+		#endif
+	;
 	//Count the number of living neighbors surrounding us.
 	float neighborStrength = 0;
 	const float maxStrength = 8.0;
 	for (int i = 0; i < 9; ++i)
 		if (i != ourIdx)
 			neighborStrength += prevStates[i].x;
-
 	//Apply the usual Game of Life rules to our cell, dying/living/resurrecting
 	//    based on how many living neighbors we have.
 	//Also calculate a "severity" estimating the strength of the pull towards that value.
-	float targetValue, severityT, speedScale;
-	if (neighborStrength < ThresholdTooFew)
+	float targetValue, severityT;
+	if (neighborStrength < thresholdTooFew)
 	{
 		//Die off, from underpopulation.
 		targetValue = 0;
-		severityT = 1.0 - (neighborStrength / ThresholdTooFew);
-		speedScale = 1.0;
+		severityT = 1.0 - (neighborStrength / thresholdTooFew);
 	}
-	else if (neighborStrength < ThresholdResurrect)
+	else if (neighborStrength < thresholdResurrect)
 	{
 		//Maintain current living status, from a normal population.
 		targetValue = prevStates[ourIdx].x;
 		severityT = 1.0;
-		speedScale = 1.0;
 	}
-	else if (neighborStrength <= ThresholdTooMany)
+	else if (neighborStrength <= thresholdTooMany)
 	{
 		//Come alive, from an ideal population.
 		targetValue = 1;
-		severityT = (neighborStrength - ThresholdResurrect) / max(0.0001, ThresholdTooMany - ThresholdResurrect);
-		speedScale = 1.0;
+		severityT = (neighborStrength - thresholdResurrect) / max(0.0001, thresholdTooMany - thresholdResurrect);
 	}
 	else
 	{
 		//Die, from overpopulation.
 		targetValue = 0;
-		severityT = (neighborStrength - ThresholdTooMany) / max(0.0001, maxStrength - ThresholdTooMany);
-		speedScale = 1.0;
+		severityT = (neighborStrength - thresholdTooMany) / max(0.0001, maxStrength - thresholdTooMany);
 	}
 
-	//Our cell has two state values: the actual, discrete living/dead bool
-	//    and a continuous alternative that moves towards the discrete target.
-	//Now that we know the bool value, update the continuous value accordingly.
-	float smoothValue = prevStates[ourIdx].y;
-	float frameSpeed = DeltaSeconds * max(OverallSpeed * 0.05, speedScale * severityT * OverallSpeed),
-		  frameVelocity = frameSpeed * sign(targetValue - smoothValue);
-	if (distance(smoothValue, targetValue) < frameSpeed)
-		smoothValue = targetValue;
-	else
-		smoothValue += frameVelocity;
+	//Run stage 2 of the Material graph's logic.
+	MaterialNewDiscreteValue = targetValue;
+	MaterialDiscreteSeverityT = severityT;
+	float smoothValue =
+		#if HAVE_GoL_Outputs_Simulate_Pt2_0
+			GoL_Outputs_Simulate_Pt2_0(matParams)
+		#else
+			targetValue
+		#endif
+	;
 
 	NextSimStateTex[pixel] = float2(targetValue, smoothValue);
 }

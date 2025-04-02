@@ -8,7 +8,7 @@
 
 float4 Main(in FTexCoordsVSToPS materialInterpolants,
 	  	    in float4 svPos : SV_Position) : SV_Target0
-{
+{	
 	//Set up the Material code.
 	FPixelMaterialInputs matInputs;
 	FMaterialPixelParameters matParams;
