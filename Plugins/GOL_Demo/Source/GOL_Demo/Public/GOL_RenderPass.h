@@ -15,6 +15,7 @@ struct GOL_DEMO_API FGameOfLifeView final : public FSnkeViewPersistentData
 	TRefCountPtr<FRHITexture2D> SimState, SimBuffer;
  
 	float NextTickTime = 0;
+	bool ReinitializeViews = false;
 	
 	FGameOfLifeView(FRDGBuilder& graph, const FViewInfo& view, const FIntRect& viewportSubset,
 					const UMaterialInterface* initShaderMaterial,
@@ -38,6 +39,9 @@ public:
 	UMaterialInterface* GetEffectMaterial_RenderThread() const { check(IsInRenderingThread()); return effectMaterial_RenderThread; }
 
 	TSnkePerViewData<FGameOfLifeView> PerViewData;
+
+	UFUNCTION(BlueprintCallable)
+	void ReInitializeAllViews();
 
 protected:
 
