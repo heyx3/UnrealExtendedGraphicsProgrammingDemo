@@ -8,6 +8,66 @@
 #include "GOL_RenderPass.generated.h"
 
 
+#pragma region Component rendering
+
+UENUM(BlueprintType)
+enum class EGoLMeshBlendModes
+{
+	Alpha,
+	Additive,
+	Multiply,
+
+	COUNT UMETA(Hidden)
+};
+ENUM_RANGE_BY_COUNT(EGoLMeshBlendModes, static_cast<int>(EGoLMeshBlendModes::COUNT));
+
+//A POD struct containing all render parameters for one component
+//    in our Game of Life effect.
+USTRUCT(BlueprintType)
+struct GOL_DEMO_API FGoLPrimitiveRenderSettings
+{
+	GENERATED_BODY()
+public:
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	EGoLMeshBlendModes BlendMode = EGoLMeshBlendModes::Alpha;
+	
+	bool operator==(const FGoLPrimitiveRenderSettings& r2) const
+	{
+		return BlendMode == r2.BlendMode;
+	}
+};
+inline uint32 GetTypeHash(const FGoLPrimitiveRenderSettings& r)
+{
+	return GetTypeHash(MakeTuple(r.BlendMode));
+}
+
+//Marks a primitive-component (mesh, particle system, etc) so that it renders into the GoL sim.
+UCLASS(meta=(BlueprintSpawnableComponent))
+class GOL_DEMO_API U_GOL_Component : public USnkeRenderPassComponent
+{
+	GENERATED_BODY()
+public:
+
+	UPROPERTY(BlueprintReadWrite, meta=(ShowOnlyInnerProperties))
+	FGoLPrimitiveRenderSettings RenderSettings;
+	
+	virtual TSubclassOf<USnkeRenderPass> GetPassType() const override;
+	virtual void ConstructProxyData_GameThread(SnkeCustomRenderPasses::ProxyData_t& output) const override
+	{
+		auto renderSettingsCpy = RenderSettings;
+		ImplConstructProxyData_GameThread(output, MoveTemp(renderSettingsCpy));
+	}
+	virtual void DestructProxyData_GameThread() const override
+	{
+		ImplDestructProxyData_GameThread<FGoLPrimitiveRenderSettings>();
+	}
+};
+
+#pragma endregion
+
+#pragma region Render Pass objects
+
 //An instance of the Game of Life sim, running in one particular viewport.
 struct GOL_DEMO_API FGameOfLifeView final : public FSnkeViewPersistentData
 {
@@ -26,7 +86,6 @@ struct GOL_DEMO_API FGameOfLifeView final : public FSnkeViewPersistentData
 						  const FInt32Point& oldResolution, const FInt32Point& newResolution,
 						  const FInt32Point& offsetDelta) override;
 };
-
 
 UCLASS(BlueprintType)
 class GOL_DEMO_API U_GOL_RenderPass : public USnkeRenderPass
@@ -55,7 +114,10 @@ private:
 	UMaterialInterface* effectMaterial_RenderThread = nullptr;
 };
 
-struct GOL_DEMO_API F_GOL_PassSVE : public TSnkeRenderPassSceneViewExtension<U_GOL_RenderPass>
+struct GOL_DEMO_API F_GOL_PassSVE : public TSnkeRenderPassSceneViewExtension<
+											   U_GOL_RenderPass,
+											   U_GOL_Component, FGoLPrimitiveRenderSettings
+										   >
 {
 	//Re-use the parent constructor:
 	using TSnkeRenderPassSceneViewExtension::TSnkeRenderPassSceneViewExtension;
@@ -64,6 +126,7 @@ struct GOL_DEMO_API F_GOL_PassSVE : public TSnkeRenderPassSceneViewExtension<U_G
 												 const FPostProcessingInputs& inputs) override;
 };
 
+#pragma endregion
 
 #pragma region Custom Material Outputs
 
@@ -141,6 +204,33 @@ public:
 	virtual void GetCaption(TArray<FString>& output) const override { output.Add(TEXT("Game of Life Outputs: Simulate pass (part 2)")); }
 	virtual int32 GetNumOutputs() const override { return 1; }
 	virtual EShaderFrequency GetShaderFrequency() override { return SF_Compute; }
+	virtual int32 Compile(class FMaterialCompiler*, int32 pinIdx) override;
+#endif
+};
+
+UCLASS(CollapseCategories, HideCategories=Object, DisplayName="GoL Outputs: Mesh")
+class GOL_DEMO_API UMaterialExpressionGoLMeshOutputs : public UMaterialExpressionCustomOutput
+{
+	GENERATED_BODY()
+public:
+
+	UPROPERTY(meta=(RequiredInput=false))
+	FExpressionInput DiscreteOutput;
+	UPROPERTY(meta=(RequiredInput=false))
+	FExpressionInput ContinuousOutput;
+
+	UPROPERTY(EditAnywhere, meta=(OverridingInputProperty=DiscreteOutput))
+	float DiscreteOutputConst = 0.5f;
+	UPROPERTY(EditAnywhere, meta=(OverridingInputProperty=ContinuousOutput))
+	float ContinuousOutputConst = 0.5f;
+
+	virtual FString GetFunctionName() const override { return TEXT("GoL_Outputs_Mesh_"); }
+	virtual FString GetDisplayName() const override { return TEXT("GoL Outputs: Mesh (pixel shader)"); }
+
+#if WITH_EDITOR
+	virtual void GetCaption(TArray<FString>& output) const override { output.Add(TEXT("Game of Life Outputs: Mesh pass (pixel shader)")); }
+	virtual int32 GetNumOutputs() const override { return 2; }
+	virtual EShaderFrequency GetShaderFrequency() override { return SF_Pixel; }
 	virtual int32 Compile(class FMaterialCompiler*, int32 pinIdx) override;
 #endif
 };

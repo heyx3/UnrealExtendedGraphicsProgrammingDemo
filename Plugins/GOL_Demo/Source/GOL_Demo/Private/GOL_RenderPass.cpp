@@ -2,8 +2,12 @@
 
 #include "MaterialCompiler.h"
 #include "RenderGraphUtils.h"
-#include "SnkePostProcessMaterialShaders.h"
+#include "SimpleMeshDrawCommandPass.h"
 #include "Runtime/Renderer/Private/PostProcess/PostProcessing.h"
+#include "Runtime/Renderer/Public/MeshPassProcessor.inl"
+
+#include "SnkeGetMeshBatches.h"
+#include "SnkePostProcessMaterialShaders.h"
 
 
 FRHITextureCreateDesc FGameOfLifeView::SimStateDesc(const FInt32Point& viewportSize)
@@ -256,6 +260,176 @@ static void UpdateGoLState(FRDGBuilder& graph, const FViewInfo& view,
 
 #pragma endregion
 
+#pragma region Primitive Component draw passes
+
+TSubclassOf<USnkeRenderPass> U_GOL_Component::GetPassType() const
+{
+	return U_GOL_RenderPass::StaticClass();
+}
+
+//Custom render-pass settings for each individual mesh batch within each component we want to render.
+//This is actually where we need to keep all shader parameters even if they're not per-batch.
+struct FGoLMeshShaderElementData : public FMeshMaterialShaderElementData
+{
+	FRHITexture* PreviousStateTex;
+	FRHISamplerState* PreviousStateSampler;
+};
+
+class FGoLMeshVS : public FMeshMaterialShader
+{
+public:
+	DECLARE_SHADER_TYPE(FGoLMeshVS, MeshMaterial);
+
+	static bool ShouldCompilePermutation(const FMeshMaterialShaderPermutationParameters& params)
+	{
+		return params.MaterialParameters.MaterialDomain == MD_Surface &&
+			   FMeshMaterialShader::ShouldCompilePermutation(params);
+	}
+
+	FGoLMeshVS() = default;
+	FGoLMeshVS(const ShaderMetaType::CompiledShaderInitializerType& initializer)
+		: FMeshMaterialShader(initializer)
+	{
+	}
+};
+class FGoLMeshPS : public FMeshMaterialShader
+{
+public:
+	DECLARE_SHADER_TYPE(FGoLMeshPS, MeshMaterial);
+
+	static bool ShouldCompilePermutation(const FMeshMaterialShaderPermutationParameters& params)
+	{
+		return params.MaterialParameters.MaterialDomain == MD_Surface &&
+			   FMeshMaterialShader::ShouldCompilePermutation(params);
+	}
+
+	FGoLMeshPS() = default;
+	FGoLMeshPS(const ShaderMetaType::CompiledShaderInitializerType& initializer)
+		: FMeshMaterialShader(initializer)
+	{
+		//The user's Material may or may not make use of the previous state texture,
+		//    so the uniforms must be marked Optional.
+		PreviousStateTex.Bind(
+			initializer.ParameterMap,
+			TEXT("PreviousStateTex"),
+			SPF_Optional
+		);
+		PreviousStateSampler.Bind(
+			initializer.ParameterMap,
+			TEXT("PreviousStateSampler"),
+			SPF_Optional
+		);
+	}
+
+	//Binds parameters to the shader to render the given "element".
+	void GetShaderBindings(
+		const FScene* scene,
+		ERHIFeatureLevel::Type featureLevel,
+		const FPrimitiveSceneProxy* primitiveSceneProxy,
+		const FMaterialRenderProxy& materialRenderProxy,
+		const FMaterial& material,
+		const FMeshPassProcessorRenderState& drawRenderState,
+		const FGoLMeshShaderElementData& element,
+		FMeshDrawSingleShaderBindings& shaderBindings) const
+	{
+		FMeshMaterialShader::GetShaderBindings(
+			scene, featureLevel,
+			primitiveSceneProxy, materialRenderProxy, material,
+			drawRenderState, element, shaderBindings
+		);
+
+		shaderBindings.AddTexture(PreviousStateTex, PreviousStateSampler,
+								  element.PreviousStateSampler, element.PreviousStateTex);
+	}
+
+private:
+
+	LAYOUT_FIELD(FShaderResourceParameter, PreviousStateTex);
+	LAYOUT_FIELD(FShaderResourceParameter, PreviousStateSampler);
+};
+
+IMPLEMENT_MATERIAL_SHADER_TYPE(, FGoLMeshVS, TEXT("/GameOfLife/Mesh.usf"), TEXT("MainVS"), SF_Vertex);
+IMPLEMENT_MATERIAL_SHADER_TYPE(, FGoLMeshPS, TEXT("/GameOfLife/Mesh.usf"), TEXT("MainPS"), SF_Pixel);
+
+//This struct doesn't feed into any shader, but tells the RDG about our mesh pass.
+BEGIN_SHADER_PARAMETER_STRUCT(FGoLMeshPassParameters, )
+	SHADER_PARAMETER_RDG_TEXTURE_SRV(Texture2D<float2>, PrevState)
+	SHADER_PARAMETER_STRUCT_REF(FViewUniformShaderParameters, View)
+	SHADER_PARAMETER_RDG_UNIFORM_BUFFER(FSceneUniformParameters, Scene)
+	SHADER_PARAMETER_STRUCT_INCLUDE(FInstanceCullingDrawParams, InstanceCullingDrawParams)
+	RENDER_TARGET_BINDING_SLOTS()
+END_SHADER_PARAMETER_STRUCT()
+
+//Generates actual draw calls for various kinds of 3D primitives.
+class FGoLMeshProcessor final : public FMeshPassProcessor
+{
+public:
+
+	FMeshPassProcessorRenderState PassDrawState;
+
+	FGoLMeshProcessor(const FScene* scene, const FSceneView* view,
+					  ERHIFeatureLevel::Type featureLevel,
+					  FMeshPassDrawListContext* commandsOutput,
+					  FBlendStateRHIRef blendState)
+		: FMeshPassProcessor(scene, featureLevel, view, commandsOutput)
+	{
+		PassDrawState.SetBlendState(blendState);
+		PassDrawState.SetDepthStencilState(TStaticDepthStencilState<false, CF_DepthNearOrEqual>::GetRHI());
+	}
+
+	void AddMeshBatch(const FMeshBatch& batch, uint64 batchElementMask,
+					  const FPrimitiveSceneProxy* proxy, int32 staticMeshID,
+					  FRHITexture* prevState, FRHISamplerState* prevStateSampler)
+	{
+		//Get the first usable Material in the chain,
+		//    starting at the batch's desired Material and ending at the Default Material.
+		const FMaterialRenderProxy* fallbackMat = nullptr;
+		const auto& resource = batch.MaterialRenderProxy->GetMaterialWithFallback(
+			FeatureLevel, fallbackMat
+		);
+		const auto& materialProxy = fallbackMat ? *fallbackMat : *batch.MaterialRenderProxy;
+		
+		//Compile our shaders against the batch's Material and Vertex-Factory.
+		TMeshProcessorShaders<FGoLMeshVS, FGoLMeshPS> shaderRefs;
+		{
+			FMaterialShaderTypes shaderTypes;
+			shaderTypes.AddShaderType<FGoLMeshVS>();
+			shaderTypes.AddShaderType<FGoLMeshPS>();
+
+			FMaterialShaders materialShaders;
+			verify(resource.TryGetShaders(shaderTypes, batch.VertexFactory->GetType(), materialShaders));
+
+			materialShaders.TryGetVertexShader(shaderRefs.VertexShader);
+			materialShaders.TryGetPixelShader(shaderRefs.PixelShader);
+		}
+
+		//Configure per-element settings.
+		FGoLMeshShaderElementData elementData;
+		elementData.InitializeMeshMaterialData(ViewIfDynamicMeshCommand, proxy, batch, staticMeshID, false);
+		//Set per-element shader parameters.
+		elementData.PreviousStateTex = prevState;
+		elementData.PreviousStateSampler = prevStateSampler;
+
+		//Generate the draw calls for this batch.
+		const FMeshDrawingPolicyOverrideSettings overrides = ComputeMeshOverrideSettings(batch);
+		BuildMeshDrawCommands(
+			batch, batchElementMask, proxy,
+			materialProxy, resource, PassDrawState,
+			MoveTemp(shaderRefs),
+			ComputeMeshFillMode(resource, overrides),
+			ComputeMeshCullMode(resource, overrides),
+			FMeshDrawCommandSortKey::Default, EMeshPassFeatures::Default,
+			elementData
+		);
+	}
+	
+	//The usual 'AddMeshBatch()' will not be used; instead we will use an alternative with more parameters.
+	virtual void AddMeshBatch(const FMeshBatch& batch, uint64 batchElementMask,
+							  const FPrimitiveSceneProxy* proxy, int32 staticMeshID) override { check(false); }
+};
+
+#pragma endregion
+
 TSharedRef<FSnkeRenderPassSceneViewExtension> U_GOL_RenderPass::InitThisPass_GameThread(UWorld& thisWorld)
 {
 	return FSceneViewExtensions::NewExtension<F_GOL_PassSVE>(this);
@@ -304,6 +478,9 @@ void F_GOL_PassSVE::PrePostProcessPass_RenderThread(FRDGBuilder& graph, const FS
 	auto& view = reinterpret_cast<const FViewInfo&>(_view);
 	auto* passMaterial = Pass->GetEffectMaterial_RenderThread();
 	
+	RDG_EVENT_SCOPE(graph, "Game of Life, viewport %ix%i",
+					view.ViewRect.Width(), view.ViewRect.Height());
+	
 	//Get or create the per-view data.
 	auto& viewData = Pass->PerViewData.DataForView(
 		graph, view,
@@ -315,6 +492,7 @@ void F_GOL_PassSVE::PrePostProcessPass_RenderThread(FRDGBuilder& graph, const FS
 	//If re-initialization was requested, do that first.
 	if (viewData.ReinitializeViews)
 	{
+		RDG_EVENT_SCOPE(graph, "GoL: Re-initialize");
 		InitGoLState(graph, simStateRDG, view,
 				     GetSceneTextureShaderParameters(inputs.SceneTextures),
 				     passMaterial);
@@ -323,6 +501,8 @@ void F_GOL_PassSVE::PrePostProcessPass_RenderThread(FRDGBuilder& graph, const FS
 	//If some time has passed on the game thread, tick this viewport's sim.
 	if (viewData.NextTickTime > 0)
 	{
+		RDG_EVENT_SCOPE(graph, "GoL: Tick %f seconds", viewData.NextTickTime);
+		
 		auto nextSimStateRDG = RegisterExternalTexture(graph, viewData.SimBuffer, TEXT("GoL_NextState"));
 		UpdateGoLState(
 			graph, view,
@@ -333,8 +513,88 @@ void F_GOL_PassSVE::PrePostProcessPass_RenderThread(FRDGBuilder& graph, const FS
 		simStateRDG = nextSimStateRDG;
 		viewData.NextTickTime = 0;
 	}
+
+	//Draw our mesh pass into the sim state.
+	{
+		RDG_EVENT_SCOPE(graph, "GoL: Mesh passes (%i primitives)",
+						Pass->GetComponentData_RenderThread().Num());
+
+		FScene* renderScene = nullptr;
+		if (view.Family != nullptr && view.Family->Scene != nullptr)
+			renderScene = view.Family->Scene->GetRenderScene();
+
+		//Note that it doesn't matter if the texture has already been registered in this graph previously --
+		//    in that case its previous RDG handle will be returned here.
+		auto nextSimStateRDG = RegisterExternalTexture(
+			graph, viewData.SimBuffer,
+			TEXT("GoL_NextState")
+		);
+
+		//Set up the RDG configuration of the pass.
+		auto* passParams = graph.AllocParameters<FGoLMeshPassParameters>();
+		passParams->View = view.ViewUniformBuffer;
+		passParams->Scene = GetSceneUniformBufferRef(graph, view);
+		passParams->PrevState = graph.CreateSRV(FRDGTextureSRVDesc{ simStateRDG });
+		passParams->RenderTargets[0] = FRenderTargetBinding{ nextSimStateRDG, ERenderTargetLoadAction::ELoad };
+		//Use the scene's depth buffer for depth-testing.
+		passParams->RenderTargets.DepthStencil = {
+			inputs.SceneTextures->GetContents()->SceneDepthTexture,
+			ERenderTargetLoadAction::ELoad,
+			FExclusiveDepthStencil::DepthRead_StencilNop
+		};
+
+		//Dispatch the draw calls.
+		AddCopyTexturePass(graph, simStateRDG, nextSimStateRDG);
+		AddSimpleMeshPass(graph, passParams, renderScene, view, nullptr,
+						  RDG_EVENT_NAME("GoLMeshes"), view.ViewRect,
+						  [&](FDynamicPassMeshDrawListContext* output)
+	    {
+			//Define one mesh processor for each blend mode.
+		    FGoLMeshProcessor meshProcessorAlpha{
+		    	renderScene, &view, view.FeatureLevel, output,
+		    	TStaticBlendState<CW_RGBA, BO_Add, BF_SourceAlpha, BF_InverseSourceAlpha>::GetRHI()
+		    };
+			FGoLMeshProcessor meshProcessorAdditive{
+				renderScene, &view, view.FeatureLevel, output,
+				TStaticBlendState<CW_RGBA, BO_Add, BF_One, BF_One>::GetRHI()
+			};
+			FGoLMeshProcessor meshProcessorMultiply{
+				renderScene, &view, view.FeatureLevel, output,
+				TStaticBlendState<CW_RGBA, BO_Add, BF_DestColor, BF_Zero>::GetRHI()
+			};
+
+			//Get every scene primitive that's tagged with our custom component.
+			ForEachComponent_RenderThread([&](const U_GOL_Component& component,
+						  						   const FGoLPrimitiveRenderSettings& componentSettings,
+						  						   const UPrimitiveComponent& primitive,
+						  						   const FPrimitiveSceneProxy& primitiveProxy)
+			{
+				//Pick the blend mode.
+				FGoLMeshProcessor* componentProcessor;
+				switch (componentSettings.BlendMode)
+				{
+					case EGoLMeshBlendModes::Alpha: componentProcessor = &meshProcessorAlpha; break;
+					case EGoLMeshBlendModes::Additive: componentProcessor = &meshProcessorAdditive; break;
+					case EGoLMeshBlendModes::Multiply: componentProcessor = &meshProcessorMultiply; break;
+					default: check(false); return;
+				}
+				
+				//Draw every renderable mesh-batch in that component.
+				Snke::ForEachBatch(view, &primitiveProxy, [&](const FMeshBatch& batch, uint64 mask, const auto* sceneProxy)
+				{
+					componentProcessor->AddMeshBatch(batch, mask, sceneProxy, -1,
+													 viewData.SimState,
+													 TStaticSamplerState<SF_Bilinear, AM_Clamp, AM_Clamp>::GetRHI());
+				});
+			});
+	    });
+
+		//Swap 'previous' and 'next' textures.
+		std::swap(viewData.SimBuffer, viewData.SimState);
+		simStateRDG = nextSimStateRDG;
+	}
 	
-	//Draw onto the scene color texture.
+	//Finally, draw the sim state onto the scene color texture.
 	RenderGoLState(
 		graph, view, simStateRDG,
 		//Use multiplicative blending.
@@ -411,6 +671,30 @@ int32 UMaterialExpressionGoLSimulate2Outputs::Compile(FMaterialCompiler* compile
 	};
 
 	if (!doPin(0, ContinuousValue, nullptr))
+	{
+		codeID = INDEX_NONE;
+	}
+	return compiler->CustomOutput(this, pinIdx, codeID);
+}
+int32 UMaterialExpressionGoLMeshOutputs::Compile(FMaterialCompiler* compiler, int32 pinIdx)
+{
+	int32 codeID;
+	auto doPin = [&](int32 i, FExpressionInput& pin, float* fallback)
+	{
+		if (pinIdx != i)
+			return false;
+		
+		if (pin.IsConnected())
+			codeID = pin.Compile(compiler);
+		else if (fallback)
+			codeID = compiler->Constant(*fallback);
+		else
+			codeID = INDEX_NONE;
+		return true;
+	};
+
+	if (!doPin(0, DiscreteOutput, &DiscreteOutputConst) &&
+		  !doPin(1, ContinuousOutput, &ContinuousOutputConst))
 	{
 		codeID = INDEX_NONE;
 	}
