@@ -23,7 +23,8 @@ public class GOL_Demo : ModuleRules
 			"Engine",
 			"Slate",
 			"SlateCore",
-			"RenderCore", "Renderer", "RHICore", "RHI"
+			"RenderCore", "Renderer", "RHICore", "RHI",
+			"Landscape"
 		});
 	}
 }

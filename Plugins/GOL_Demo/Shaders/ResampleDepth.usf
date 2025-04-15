@@ -1,0 +1,16 @@
+#include "/Engine/Private/Common.ush"
+
+//Assumes we're using this vertex shader:
+//  #include "/Engine/Private/ScreenPass.usf"
+
+Texture2D<float> DepthTex;
+SamplerState DepthSampler;
+float2 SrcUvMin;
+float2 SrcUvMax;
+
+void Main(in noperspective float4 uvAndScreenPos : TEXCOORD0,
+		  out float newDepth : SV_Target0)
+{
+	float2 uv = lerp(SrcUvMin, SrcUvMax, uvAndScreenPos.xy);
+	newDepth = DepthTex.SampleLevel(DepthSampler, uv, 0);
+}

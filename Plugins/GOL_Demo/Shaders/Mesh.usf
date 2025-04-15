@@ -75,16 +75,22 @@ void MainPS(in FPassVSToPS inputs //No comma here; the macro on the next line ma
 	;
 	outState.y =
 		#if HAVE_GoL_Outputs_Mesh_1
-			GoL_Outputs_Mesh_1(mParameters);
+			GoL_Outputs_Mesh_1(mParameters)
 		#else
 			outState.x
+		#endif
+	;
+	outState.a =
+		#if HAVE_GoL_Outputs_Mesh_2
+			GoL_Outputs_Mesh_2(mParameters)
+		#else
+			1.0
 		#endif
 	;
 	
 	//Sanitize our outputs.
 	outState.x = step(0.5, outState.x);
 	outState.y = saturate(outState.y);
-
 	outState.z = 0;
-	outState.a = 1;
+	outState.a = saturate(outState.a);
 }

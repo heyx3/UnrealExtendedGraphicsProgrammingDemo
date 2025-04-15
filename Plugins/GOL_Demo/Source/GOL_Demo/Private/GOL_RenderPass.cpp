@@ -1,5 +1,6 @@
 #include "GOL_RenderPass.h"
 
+#include "Landscape.h"
 #include "MaterialCompiler.h"
 #include "RenderGraphUtils.h"
 #include "SimpleMeshDrawCommandPass.h"
@@ -8,6 +9,7 @@
 
 #include "SnkeGetMeshBatches.h"
 #include "SnkePostProcessMaterialShaders.h"
+#include "SnkeDownsampleDepthPass.h"
 
 
 FRHITextureCreateDesc FGameOfLifeView::SimStateDesc(const FInt32Point& viewportSize)
@@ -267,6 +269,47 @@ TSubclassOf<USnkeRenderPass> U_GOL_Component::GetPassType() const
 	return U_GOL_RenderPass::StaticClass();
 }
 
+//Shader to resample the depth buffer from the viewport to the sim state's space.
+struct FGoLResampleDepthPS : public FGlobalShader
+{
+	DECLARE_GLOBAL_SHADER(FGoLResampleDepthPS);
+	
+	BEGIN_SHADER_PARAMETER_STRUCT(FParameters, )
+		SHADER_PARAMETER_RDG_TEXTURE_SRV(Texture2D<float2>, DepthTex)
+		SHADER_PARAMETER_SAMPLER(SamplerState, DepthSampler)
+		SHADER_PARAMETER(FVector2f, SrcUvMin)
+		SHADER_PARAMETER(FVector2f, SrcUvMax)
+		RENDER_TARGET_BINDING_SLOTS()
+	END_SHADER_PARAMETER_STRUCT()
+	SHADER_USE_PARAMETER_STRUCT(FGoLResampleDepthPS, FGlobalShader)
+};
+IMPLEMENT_GLOBAL_SHADER(FGoLResampleDepthPS, "/GameOfLife/ResampleDepth.usf", "Main", SF_Pixel);
+static void ResampleDepth(FRDGBuilder& graph, const FViewInfo& view,
+				 	      FRDGTextureRef inputDepth, FRDGTextureRef outputDepth)
+{
+	check(outputDepth->Desc.Extent == view.ViewRect.Size());
+	
+	auto* params = graph.AllocParameters<FGoLResampleDepthPS::FParameters>();
+	params->DepthTex = graph.CreateSRV(FRDGTextureSRVDesc{ inputDepth });
+	params->DepthSampler = TStaticSamplerState<SF_Bilinear, AM_Clamp, AM_Clamp>::GetRHI();
+	params->RenderTargets[0] = { outputDepth, ERenderTargetLoadAction::ENoAction };
+
+	auto screenTexel = FVector2f{ 1, 1 } / view.Family->RenderTarget->GetSizeXY();
+	params->SrcUvMin = (FVector2f{ view.ViewRect.Min } + 0.0f) * screenTexel;
+	params->SrcUvMax = (FVector2f{ view.ViewRect.Max } + 1.0f) * screenTexel;
+	
+	//Unreal's "draw screen pass" will by default cover the whole screen using opaque blending
+	//    and use their own trivial Vertex Shader.
+	//This is perfect for our use-case.
+	AddDrawScreenPass(
+		graph, RDG_EVENT_NAME("GoL_ResampleDepth"), view,
+		FScreenPassTextureViewport{ outputDepth },
+		FScreenPassTextureViewport{ inputDepth },
+		TShaderMapRef<FGoLResampleDepthPS>{ view.ShaderMap },
+		params
+	);
+}
+
 //Custom render-pass settings for each individual mesh batch within each component we want to render.
 //This is actually where we need to keep all shader parameters even if they're not per-batch.
 struct FGoLMeshShaderElementData : public FMeshMaterialShaderElementData
@@ -523,6 +566,28 @@ void F_GOL_PassSVE::PrePostProcessPass_RenderThread(FRDGBuilder& graph, const FS
 		if (view.Family != nullptr && view.Family->Scene != nullptr)
 			renderScene = view.Family->Scene->GetRenderScene();
 
+		//We want to use the scene's depth-texture for our mesh pass,
+		//    however the Game of Life state texture exists on its own rather than being a subset of a viewport texture
+		//    and also may be lower-resolution.
+		//To use the depth buffer, we need to resample it.
+		FRDGTextureRef depthBuffer = inputs.SceneTextures->GetContents()->SceneDepthTexture;
+		if (view.ViewRect.Min != FIntPoint::ZeroValue || depthBuffer->Desc.Extent != viewData.SimState->GetSizeXY())
+		{
+			auto resampledDepthBufferDesc = depthBuffer->Desc;
+			resampledDepthBufferDesc.Extent = viewData.SimState->GetSizeXY();
+			FRDGTextureRef resampledDepthBuffer = graph.CreateTexture(
+				resampledDepthBufferDesc, TEXT("GoL_ResampledSceneDepth")
+			);
+			
+			Snke::AddDownsampleDepthPass(
+				graph, view,
+				FScreenPassTexture{ depthBuffer, view.ViewRect },
+				FScreenPassRenderTarget{ resampledDepthBuffer, ERenderTargetLoadAction::ENoAction },
+				EDownsampleDepthFilter::Max
+			);
+			depthBuffer = resampledDepthBuffer;
+		}
+
 		//Note that it doesn't matter if the texture has already been registered in this graph previously --
 		//    in that case its previous RDG handle will be returned here.
 		auto nextSimStateRDG = RegisterExternalTexture(
@@ -536,9 +601,8 @@ void F_GOL_PassSVE::PrePostProcessPass_RenderThread(FRDGBuilder& graph, const FS
 		passParams->Scene = GetSceneUniformBufferRef(graph, view);
 		passParams->PrevState = graph.CreateSRV(FRDGTextureSRVDesc{ simStateRDG });
 		passParams->RenderTargets[0] = FRenderTargetBinding{ nextSimStateRDG, ERenderTargetLoadAction::ELoad };
-		//Use the scene's depth buffer for depth-testing.
 		passParams->RenderTargets.DepthStencil = {
-			inputs.SceneTextures->GetContents()->SceneDepthTexture,
+			depthBuffer,
 			ERenderTargetLoadAction::ELoad,
 			FExclusiveDepthStencil::DepthRead_StencilNop
 		};
@@ -546,7 +610,8 @@ void F_GOL_PassSVE::PrePostProcessPass_RenderThread(FRDGBuilder& graph, const FS
 		//Dispatch the draw calls.
 		AddCopyTexturePass(graph, simStateRDG, nextSimStateRDG);
 		AddSimpleMeshPass(graph, passParams, renderScene, view, nullptr,
-						  RDG_EVENT_NAME("GoLMeshes"), view.ViewRect,
+						  RDG_EVENT_NAME("GoLMeshes"),
+						  FIntRect{ FIntPoint::ZeroValue, simStateRDG->Desc.Extent },
 						  [&](FDynamicPassMeshDrawListContext* output)
 	    {
 			//Define one mesh processor for each blend mode.
@@ -694,10 +759,18 @@ int32 UMaterialExpressionGoLMeshOutputs::Compile(FMaterialCompiler* compiler, in
 	};
 
 	if (!doPin(0, DiscreteOutput, &DiscreteOutputConst) &&
-		  !doPin(1, ContinuousOutput, &ContinuousOutputConst))
+		  !doPin(1, ContinuousOutput, &ContinuousOutputConst) &&
+		  !doPin(2, OutputAlpha, &OutputAlphaConst))
 	{
 		codeID = INDEX_NONE;
 	}
 	return compiler->CustomOutput(this, pinIdx, codeID);
 }
 #endif
+
+void UGoLUtilities::GetLandscapeComponents(ALandscape* landscape, TArray<ULandscapeComponent*>& output)
+{
+	output.Empty();
+	for (TObjectIterator<ULandscapeComponent> it; it; ++it)
+		output.Add(*it);
+}

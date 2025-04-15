@@ -218,21 +218,35 @@ public:
 	FExpressionInput DiscreteOutput;
 	UPROPERTY(meta=(RequiredInput=false))
 	FExpressionInput ContinuousOutput;
+	UPROPERTY(meta=(RequiredInput=false))
+	FExpressionInput OutputAlpha;
 
 	UPROPERTY(EditAnywhere, meta=(OverridingInputProperty=DiscreteOutput))
 	float DiscreteOutputConst = 0.5f;
 	UPROPERTY(EditAnywhere, meta=(OverridingInputProperty=ContinuousOutput))
 	float ContinuousOutputConst = 0.5f;
+	UPROPERTY(EditAnywhere, meta=(OverridingInputProperty=OutputAlpha))
+	float OutputAlphaConst = 1.0f;
 
 	virtual FString GetFunctionName() const override { return TEXT("GoL_Outputs_Mesh_"); }
 	virtual FString GetDisplayName() const override { return TEXT("GoL Outputs: Mesh (pixel shader)"); }
 
 #if WITH_EDITOR
 	virtual void GetCaption(TArray<FString>& output) const override { output.Add(TEXT("Game of Life Outputs: Mesh pass (pixel shader)")); }
-	virtual int32 GetNumOutputs() const override { return 2; }
+	virtual int32 GetNumOutputs() const override { return 3; }
 	virtual EShaderFrequency GetShaderFrequency() override { return SF_Pixel; }
 	virtual int32 Compile(class FMaterialCompiler*, int32 pinIdx) override;
 #endif
 };
 
 #pragma endregion
+
+UCLASS(BlueprintType)
+class GOL_DEMO_API UGoLUtilities : public UBlueprintFunctionLibrary
+{
+	GENERATED_BODY()
+public:
+
+	UFUNCTION(BlueprintCallable, BlueprintPure)
+	static void GetLandscapeComponents(class ALandscape* landscape, TArray<class ULandscapeComponent*>& output);
+};
