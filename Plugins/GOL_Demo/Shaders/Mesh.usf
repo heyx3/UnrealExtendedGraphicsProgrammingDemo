@@ -3,19 +3,19 @@
 //Include the Material code THEN the Vertex Factory code.
 //For Intellisense, as a stand-in, use the Material template and a specific built-in vertex factory.
 #if defined(__RESHARPER__) || defined(__INTELLISENSE__)
-	#define PIXELSHADER 1
-	#include "/Engine/Private/MaterialTemplate.ush"
-	#include "/Engine/Private/LocalVertexFactory.ush"
+    #define PIXELSHADER 1
+    #include "/Engine/Private/MaterialTemplate.ush"
+    #include "/Engine/Private/LocalVertexFactory.ush"
 #else
-	#include "/Engine/Generated/Material.ush"
-	#include "/Engine/Generated/VertexFactory.ush"
+    #include "/Engine/Generated/Material.ush"
+    #include "/Engine/Generated/VertexFactory.ush"
 #endif
 
-//Define the outputs from the VS into the HAS_INSTANCE_LOCAL_TO_WORLD_PS.
+//Define the outputs from the VS into the PS.
 struct FPassVSToPS
 {
-	FVertexFactoryInterpolantsVSToPS VFInterpolants;
-	float4 Position : SV_POSITION;
+    FVertexFactoryInterpolantsVSToPS VFInterpolants;
+    float4 Position : SV_POSITION;
 };
 
 //The vertex shader is a pretty simple pass-through,
@@ -23,74 +23,68 @@ struct FPassVSToPS
 //    and the Material for vertex animations.
 void MainVS(FVertexFactoryInput inputs, out FPassVSToPS outputs)
 {
-	//Set up viewport data (I think this mainly chooses which viewport to use in a stereo VR setup?)
-	ResolvedView = ResolveView();
+    //Set up viewport data (I think this mainly chooses which viewport to use in a stereo VR setup?)
+    ResolvedView = ResolveView();
 
-	//Invoke the vertex-factory to get world-space data.
-	FVertexFactoryIntermediates vfIntermediates = GetVertexFactoryIntermediates(inputs);
-	float4 worldPos4 = VertexFactoryGetWorldPosition(inputs, vfIntermediates);
-	float3x3 tangentToLocal = VertexFactoryGetTangentToLocal(inputs, vfIntermediates);
+    //Invoke the vertex-factory to get world-space data.
+    FVertexFactoryIntermediates vfIntermediates = GetVertexFactoryIntermediates(inputs);
+    float4 worldPos4 = VertexFactoryGetWorldPosition(inputs, vfIntermediates);
+    float3x3 tangentToLocal = VertexFactoryGetTangentToLocal(inputs, vfIntermediates);
 
-	//Invoke the Material and apply its world-position-offset pin.
-	FMaterialVertexParameters mParameters = GetMaterialVertexParameters(inputs, vfIntermediates,
-																		worldPos4.xyz, tangentToLocal);
-	worldPos4.xyz += GetMaterialWorldPositionOffset(mParameters);
+    //Invoke the Material and apply its world-position-offset pin.
+    FMaterialVertexParameters mParameters = GetMaterialVertexParameters(inputs, vfIntermediates,
+                                                                        worldPos4.xyz, tangentToLocal);
+    worldPos4.xyz += GetMaterialWorldPositionOffset(mParameters);
 
-	//Calculate PS inputs.
-	outputs.VFInterpolants = VertexFactoryGetInterpolantsVSToPS(inputs, vfIntermediates, mParameters);
-	outputs.Position = INVARIANT(mul(VertexFactoryGetRasterizedWorldPosition(inputs, vfIntermediates, worldPos4),
-								     ResolvedView.TranslatedWorldToClip));
+    //Calculate PS inputs.
+    outputs.VFInterpolants = VertexFactoryGetInterpolantsVSToPS(inputs, vfIntermediates, mParameters);
+    outputs.Position = INVARIANT(mul(VertexFactoryGetRasterizedWorldPosition(inputs, vfIntermediates, worldPos4),
+                                     ResolvedView.TranslatedWorldToClip));
 }
 
 
 #if PIXELSHADER
-	Texture2D<float2> PreviousStateTex;
-	SamplerState PreviousStateSampler;
+    Texture2D<float2> PreviousStateTex;
+    SamplerState PreviousStateSampler;
 #endif
 
 //The pixel shader invokes our custom Material output pins.
 void MainPS(in FPassVSToPS inputs //No comma here; the macro on the next line may be empty
-				OPTIONAL_IsFrontFace,
-			out float4 outState : SV_Target0)
+                OPTIONAL_IsFrontFace,
+            out float4 outState : SV_Target0)
 {
-	//Process uniforms.
-	#if INSTANCED_STEREO
-		ResolvedView = ResolveView(input.FactoryInterpolants.EyeIndex);
-	#else
-		ResolvedView = ResolveView();
-	#endif
+    //Process uniforms.
+    #if INSTANCED_STEREO
+        ResolvedView = ResolveView(input.FactoryInterpolants.EyeIndex);
+    #else
+        ResolvedView = ResolveView();
+    #endif
 
-	//Process Material and Vertex Factory inputs.
-	FMaterialPixelParameters mParameters = GetMaterialPixelParameters(inputs.VFInterpolants, inputs.Position);
-	FPixelMaterialInputs mInputs;
-	CalcMaterialParameters(mParameters, mInputs, inputs.Position, bIsFrontFace);
+    //Process Material and Vertex Factory inputs.
+    FMaterialPixelParameters mParameters = GetMaterialPixelParameters(inputs.VFInterpolants, inputs.Position);
+    FPixelMaterialInputs mInputs;
+    CalcMaterialParameters(mParameters, mInputs, inputs.Position, bIsFrontFace);
 
-	//Read our custom outputs.
-	outState.x =
-		#if HAVE_GoL_Outputs_Mesh_0
-			GoL_Outputs_Mesh_0(mParameters)
-		#else
-			0
-		#endif
-	;
-	outState.y =
-		#if HAVE_GoL_Outputs_Mesh_1
-			GoL_Outputs_Mesh_1(mParameters)
-		#else
-			outState.x
-		#endif
-	;
-	outState.a =
-		#if HAVE_GoL_Outputs_Mesh_2
-			GoL_Outputs_Mesh_2(mParameters)
-		#else
-			1.0
-		#endif
-	;
-	
-	//Sanitize our outputs.
-	// outState.x = step(0.5, outState.x);
-	// outState.y = saturate(outState.y);
-	// outState.z = 0;
-	// outState.a = saturate(outState.a);
+    //Read our custom outputs.
+    outState.x =
+        #if HAVE_GoL_Outputs_Mesh_0
+            GoL_Outputs_Mesh_0(mParameters)
+        #else
+            0
+        #endif
+    ;
+    outState.y =
+        #if HAVE_GoL_Outputs_Mesh_1
+            GoL_Outputs_Mesh_1(mParameters)
+        #else
+            outState.x
+        #endif
+    ;
+    outState.a =
+        #if HAVE_GoL_Outputs_Mesh_2
+            GoL_Outputs_Mesh_2(mParameters)
+        #else
+            1.0
+        #endif
+    ;
 }

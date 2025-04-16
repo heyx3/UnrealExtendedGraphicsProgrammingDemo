@@ -44,7 +44,7 @@ inline uint32 GetTypeHash(const FGoLPrimitiveRenderSettings& r)
 
 //Marks a primitive-component (mesh, particle system, etc) so that it renders into the GoL sim.
 UCLASS(meta=(BlueprintSpawnableComponent))
-class GOL_DEMO_API U_GOL_Component : public USnkeRenderPassComponent
+class GOL_DEMO_API UGoLComponent : public USnkeRenderPassComponent
 {
 	GENERATED_BODY()
 public:
@@ -53,15 +53,7 @@ public:
 	FGoLPrimitiveRenderSettings RenderSettings;
 	
 	virtual TSubclassOf<USnkeRenderPass> GetPassType() const override;
-	virtual void ConstructProxyData_GameThread(SnkeCustomRenderPasses::ProxyData_t& output) const override
-	{
-		auto renderSettingsCpy = RenderSettings;
-		ImplConstructProxyData_GameThread(output, MoveTemp(renderSettingsCpy));
-	}
-	virtual void DestructProxyData_GameThread() const override
-	{
-		ImplDestructProxyData_GameThread<FGoLPrimitiveRenderSettings>();
-	}
+	SNKE_PASS_COMPONENT_SIMPLE_PROXY_IMPL(FGoLPrimitiveRenderSettings, RenderSettings)
 };
 
 #pragma endregion
@@ -116,7 +108,7 @@ private:
 
 struct GOL_DEMO_API F_GOL_PassSVE : public TSnkeRenderPassSceneViewExtension<
 											   U_GOL_RenderPass,
-											   U_GOL_Component, FGoLPrimitiveRenderSettings
+											   UGoLComponent, FGoLPrimitiveRenderSettings
 										   >
 {
 	//Re-use the parent constructor:
