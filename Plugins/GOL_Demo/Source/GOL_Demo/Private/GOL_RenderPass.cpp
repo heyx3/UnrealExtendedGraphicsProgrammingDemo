@@ -567,7 +567,8 @@ void F_GOL_PassSVE::PrePostProcessPass_RenderThread(FRDGBuilder& graph, const FS
 			renderScene = view.Family->Scene->GetRenderScene();
 
 		//We want to use the scene's depth-texture for our mesh pass,
-		//    however the Game of Life state texture exists on its own rather than being a subset of a viewport texture
+		//    however the Game of Life state texture exists on its own
+		//    rather than being a subset of a larger viewport texture,
 		//    and also may be lower-resolution.
 		//To use the depth buffer, we need to resample it.
 		FRDGTextureRef depthBuffer = inputs.SceneTextures->GetContents()->SceneDepthTexture;
@@ -583,7 +584,7 @@ void F_GOL_PassSVE::PrePostProcessPass_RenderThread(FRDGBuilder& graph, const FS
 				graph, view,
 				FScreenPassTexture{ depthBuffer, view.ViewRect },
 				FScreenPassRenderTarget{ resampledDepthBuffer, ERenderTargetLoadAction::ENoAction },
-				EDownsampleDepthFilter::Max
+				EDownsampleDepthFilter::Checkerboard
 			);
 			depthBuffer = resampledDepthBuffer;
 		}

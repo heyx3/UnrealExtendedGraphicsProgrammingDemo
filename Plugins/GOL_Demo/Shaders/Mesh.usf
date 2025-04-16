@@ -89,8 +89,8 @@ void MainPS(in FPassVSToPS inputs //No comma here; the macro on the next line ma
 	;
 	
 	//Sanitize our outputs.
-	outState.x = step(0.5, outState.x);
-	outState.y = saturate(outState.y);
-	outState.z = 0;
-	outState.a = saturate(outState.a);
+	// outState.x = step(0.5, outState.x);
+	// outState.y = saturate(outState.y);
+	// outState.z = 0;
+	// outState.a = saturate(outState.a);
 }

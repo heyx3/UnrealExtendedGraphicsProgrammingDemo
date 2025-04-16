@@ -49,7 +49,7 @@ class GOL_DEMO_API U_GOL_Component : public USnkeRenderPassComponent
 	GENERATED_BODY()
 public:
 
-	UPROPERTY(BlueprintReadWrite, meta=(ShowOnlyInnerProperties))
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(ShowOnlyInnerProperties))
 	FGoLPrimitiveRenderSettings RenderSettings;
 	
 	virtual TSubclassOf<USnkeRenderPass> GetPassType() const override;
