@@ -474,7 +474,7 @@ void U_GOL_RenderPass::Tick_RenderThread(const FSceneInterface& thisScene, float
 }
 
 void F_GOL_PassSVE::PrePostProcessPass_RenderThread(FRDGBuilder& graph, const FSceneView& _view,
-                                                       const FPostProcessingInputs& inputs)
+                                                    const FPostProcessingInputs& inputs)
 {
     check(_view.bIsViewInfo);
     auto& view = reinterpret_cast<const FViewInfo&>(_view);

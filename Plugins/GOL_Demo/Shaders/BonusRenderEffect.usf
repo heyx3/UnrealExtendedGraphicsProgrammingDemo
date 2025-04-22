@@ -1,0 +1,163 @@
+#include "/Engine/Private/Common.ush"
+
+static float4 Material_ThroughValues[3];
+static float3 Material_CurrentPos;
+static float3 Material_CurrentDir;
+static float Material_CurrentStepLength;
+static float Material_FinalDistance;
+static bool Material_HitMaxSteps;
+#define SNKE_BONUS_RENDER_EFFECT 1
+
+#include "/Engine/Generated/Material.ush"
+#include "/Engine/Generated/VertexFactory.ush"
+
+//Define the outputs from the VS into the PS.
+struct FPassVSToPS
+{
+    FVertexFactoryInterpolantsVSToPS VFInterpolants;
+    float4 Position : SV_POSITION;
+};
+
+void MainVS(FVertexFactoryInput inputs, out FPassVSToPS outputs)
+{
+    ResolvedView = ResolveView();
+
+    //Invoke the vertex-factory to get world-space data.
+    FVertexFactoryIntermediates vfIntermediates = GetVertexFactoryIntermediates(inputs);
+    float4 worldPos4 = VertexFactoryGetWorldPosition(inputs, vfIntermediates);
+    float3x3 tangentToLocal = VertexFactoryGetTangentToLocal(inputs, vfIntermediates);
+
+    //Invoke the Material and apply its world-position-offset pin.
+    FMaterialVertexParameters mParameters = GetMaterialVertexParameters(
+        inputs, vfIntermediates,
+        worldPos4.xyz, tangentToLocal
+    );
+    worldPos4.xyz += GetMaterialWorldPositionOffset(mParameters);
+
+    //Calculate PS inputs.
+    outputs.VFInterpolants = VertexFactoryGetInterpolantsVSToPS(
+        inputs, vfIntermediates, mParameters
+    );
+    outputs.Position = INVARIANT(mul(
+        VertexFactoryGetRasterizedWorldPosition(inputs, vfIntermediates, worldPos4),
+        ResolvedView.TranslatedWorldToClip
+    ));
+}
+
+
+float4 MainPS(in FPassVSToPS inputs
+              OPTIONAL_IsFrontFace
+             ) : SV_Target0
+{
+    #if INSTANCED_STEREO
+        ResolvedView = ResolveView(input.FactoryInterpolants.EyeIndex);
+    #else
+        ResolvedView = ResolveView();
+    #endif
+
+    //Init material.
+    FMaterialPixelParameters mParameters = GetMaterialPixelParameters(inputs.VFInterpolants, inputs.Position);
+    FPixelMaterialInputs mInputs;
+    CalcMaterialParameters(mParameters, mInputs, inputs.Position, bIsFrontFace);
+
+    //Step 1: start the loop.
+    Material_CurrentPos =
+        #if HAVE_BRE_Outputs_Setup_0
+            BRE_Outputs_Setup_0(mParameters)
+        #else
+            float3(0, 0, 0)
+        #endif
+    ;
+    Material_CurrentDir =
+        #if HAVE_BRE_Outputs_Setup_1
+            normalize(BRE_Outputs_Setup_1(mParameters))
+        #else
+            float3(1, 0, 0)
+        #endif
+    ;
+    Material_CurrentStepLength =
+        #if HAVE_BRE_Outputs_Setup_2
+            BRE_Outputs_Setup_2(mParameters)
+        #else
+            0.01
+        #endif
+    ;
+    int maxLoops =
+        #if HAVE_BRE_Outputs_Setup_3
+            max(0, int(BRE_Outputs_Setup_3(mParameters)))
+        #else
+            100
+        #endif
+    ;
+    Material_ThroughValues[0] =
+        #if HAVE_BRE_Outputs_Setup_4
+            BRE_Outputs_Setup_4(mParameters)
+        #else
+            0
+        #endif
+    ;
+    Material_ThroughValues[1] =
+        #if HAVE_BRE_Outputs_Setup_5
+            BRE_Outputs_Setup_5(mParameters)
+        #else
+            0
+        #endif
+    ;
+    Material_ThroughValues[2] =
+        #if HAVE_BRE_Outputs_Setup_6
+            BRE_Outputs_Setup_6(mParameters)
+        #else
+            0
+        #endif
+    ;
+
+    //Step 2: run the loop.
+    Material_FinalDistance = 0;
+    Material_HitMaxSteps = true;
+    for (int i = 0; i < maxLoops; ++i)
+    {
+        #if HAVE_BRE_Outputs_Loop_0
+            if (BRE_Outputs_Loop_0(mParameters) > 0.5)
+            {
+                Material_HitMaxSteps = false;
+                break;
+            }
+        #endif
+
+        Material_CurrentPos += (Material_CurrentDir * Material_CurrentStepLength);
+        Material_FinalDistance += Material_CurrentStepLength;
+
+        #if HAVE_BRE_Outputs_Loop_1
+            Material_CurrentPos += BRE_Outputs_Loop_1(mParameters);
+        #endif
+        #if HAVE_BRE_Outputs_Loop_2
+            Material_CurrentDir = BRE_Outputs_Loop_2(mParameters);
+        #endif
+        #if HAVE_BRE_Outputs_Loop_3
+            Material_CurrentStepLength = BRE_Outputs_Loop_3(mParameters);
+        #endif
+        
+        #if HAVE_BRE_Outputs_Loop_4
+            Material_ThroughValues[0] = BRE_Outputs_Loop_4(mParameters);
+        #endif
+        #if HAVE_BRE_Outputs_Loop_5
+            Material_ThroughValues[1] = BRE_Outputs_Loop_5(mParameters);
+        #endif
+        #if HAVE_BRE_Outputs_Loop_6
+            Material_ThroughValues[2] = BRE_Outputs_Loop_6(mParameters);
+        #endif
+    }
+
+    //Step 3: shade the result.
+    #if HAVE_BRE_Outputs_Render_1
+        clip(BRE_Outputs_Render_1(mParameters) - 0.49999);
+    #endif
+	return float4(
+        #if HAVE_BRE_Outputs_Render_0
+            BRE_Outputs_Render_0(mParameters),
+        #else
+            float3(1, 0, 1),
+        #endif
+        1
+    );
+}
