@@ -192,12 +192,14 @@ public:
 
         //Generate the draw calls for this batch.
         const FMeshDrawingPolicyOverrideSettings overrides = ComputeMeshOverrideSettings(batch);
+		auto cullMode = ComputeMeshCullMode(resource, overrides);
+		if (cullMode == ERasterizerCullMode::CM_None) //The outer shell can be two-sided, but not this pass
+			cullMode = ERasterizerCullMode::CM_CW;
         BuildMeshDrawCommands(
             batch, batchElementMask, proxy,
             materialProxy, resource, PassDrawState,
             MoveTemp(shaderRefs),
-            ComputeMeshFillMode(resource, overrides),
-            ComputeMeshCullMode(resource, overrides),
+            ComputeMeshFillMode(resource, overrides), cullMode,
             FMeshDrawCommandSortKey::Default, EMeshPassFeatures::Default,
             elementData
         );

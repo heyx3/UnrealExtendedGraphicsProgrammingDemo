@@ -120,6 +120,17 @@ float4 MainPS(in FPassVSToPS inputs
             if (BRE_Outputs_Loop_0(mParameters) > 0.5)
             {
                 Material_HitMaxSteps = false;
+
+                #if HAVE_BRE_Outputs_Loop_4
+                    Material_ThroughValues[0] = BRE_Outputs_Loop_4(mParameters);
+                #endif
+                #if HAVE_BRE_Outputs_Loop_5
+                    Material_ThroughValues[1] = BRE_Outputs_Loop_5(mParameters);
+                #endif
+                #if HAVE_BRE_Outputs_Loop_6
+                    Material_ThroughValues[2] = BRE_Outputs_Loop_6(mParameters);
+                #endif
+
                 break;
             }
         #endif
