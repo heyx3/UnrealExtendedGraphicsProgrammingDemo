@@ -605,9 +605,10 @@ void F_GOL_PassSVE::PrePostProcessPass_RenderThread(FRDGBuilder& graph, const FS
                 }
                 
                 //Draw every renderable mesh-batch in that component.
-                Snke::ForEachBatch(view, &primitiveProxy, [&](const FMeshBatch& batch, uint64 mask, const auto* sceneProxy)
+                Snke::ForEachBatch(view, &primitiveProxy,
+                                   [&](const FMeshBatch& batch, uint64 mask, const auto* sceneProxy, int staticMeshID)
                 {
-                    componentProcessor->AddMeshBatch(batch, mask, sceneProxy, -1,
+                    componentProcessor->AddMeshBatch(batch, mask, sceneProxy, staticMeshID,
                                                      viewData.SimState,
                                                      TStaticSamplerState<SF_Bilinear, AM_Clamp, AM_Clamp>::GetRHI());
                 });

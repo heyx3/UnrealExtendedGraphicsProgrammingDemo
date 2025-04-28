@@ -256,9 +256,9 @@ struct FBrePassSVE : public TSnkeRenderPassSceneViewExtension<UBreRenderPass,
 											  const FPrimitiveSceneProxy& primitiveProxy)
 			{
 				Snke::ForEachBatch(view, &primitiveProxy,
-								   [&](const FMeshBatch& batch, uint64 mask, const auto* sceneProxy)
+								   [&](const FMeshBatch& batch, uint64 mask, const auto* sceneProxy, int staticMeshID)
 				{
-					meshProcessor.AddMeshBatch(batch, mask, sceneProxy, -1);
+					meshProcessor.AddMeshBatch(batch, mask, sceneProxy, staticMeshID);
 				});
 			});
 		});
