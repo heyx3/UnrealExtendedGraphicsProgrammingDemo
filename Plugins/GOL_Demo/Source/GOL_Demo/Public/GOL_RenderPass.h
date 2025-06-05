@@ -26,7 +26,7 @@ public:
 
 protected:
 
-	virtual TSharedRef<FSnkeRenderPassSceneViewExtension> InitThisPass(UWorld& thisWorld) override;
+	virtual TSharedRef<FSnkeRenderPassSceneViewExtension> InitThisPass_GameThread(UWorld& thisWorld) override;
 	virtual void Tick_GameThread(UWorld& thisWorld, float deltaSeconds) override;
 
 private:

@@ -21,7 +21,7 @@ void U_GOL_RenderPass::Tick_GameThread(UWorld& thisWorld, float deltaSeconds)
 	};
 	ENQUEUE_RENDER_COMMAND(UpdateClearColor)(MoveTemp(updateClearColor));
 }
-TSharedRef<FSnkeRenderPassSceneViewExtension> U_GOL_RenderPass::InitThisPass(UWorld& thisWorld)
+TSharedRef<FSnkeRenderPassSceneViewExtension> U_GOL_RenderPass::InitThisPass_GameThread(UWorld& thisWorld)
 {
 	//By default, only apply this pass to the first player-controller's view.
 	ViewFilter->FilterByPlayerIdx(0);
