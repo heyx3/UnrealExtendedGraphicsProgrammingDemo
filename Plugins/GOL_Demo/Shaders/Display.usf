@@ -20,8 +20,8 @@ float4 Main(in noperspective float4 uvAndScreenPos : TEXCOORD0,
 	//The latter provides a more organic visual output.
 	float2 currentState = SimState.SampleLevel(SimSampler, uv, 0);
 
-	float discreteEffectStrength = 0.3,
-		  totalEffectStrength = max(currentState.x, currentState.y);
+	float discreteEffectStrength = 0.03,
+		  totalEffectStrength = pow(max(currentState.x, currentState.y), 0.3);
 	float3 gradientCurve = float3(3.0, 1.75, 1.0); //Blueish
 	return float4(
 		lerp(

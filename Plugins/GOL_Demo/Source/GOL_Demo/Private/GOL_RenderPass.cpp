@@ -215,7 +215,6 @@ TSharedRef<FSnkeRenderPassSceneViewExtension> U_GOL_RenderPass::InitThisPass_Gam
 {
 	return FSceneViewExtensions::NewExtension<F_GOL_PassSVE>(this);
 }
-
 void U_GOL_RenderPass::Tick_RenderThread(const FSceneInterface& thisScene, float gameThreadDeltaSeconds)
 {
 	Super::Tick_RenderThread(thisScene, gameThreadDeltaSeconds);
@@ -244,6 +243,8 @@ void F_GOL_PassSVE::PrePostProcessPass_RenderThread(FRDGBuilder& graph, const FS
 {
 	check(_view.bIsViewInfo);
 	auto& view = reinterpret_cast<const FViewInfo&>(_view);
+	if (!Pass->ViewFilter->ShouldRenderFor(view))
+		return;
 	
 	//Get or create the per-view data.
 	auto& viewData = Pass->PerViewData.DataForView(

@@ -60,6 +60,10 @@ protected:
 
 	virtual TSharedRef<FSnkeRenderPassSceneViewExtension> InitThisPass_GameThread(UWorld& thisWorld) override;
 	virtual void Tick_RenderThread(const FSceneInterface& thisScene, float gameThreadDeltaSeconds) override;
+
+private:
+
+	TOptional<FLinearColor> color_renderThread;
 };
 
 struct GOL_DEMO_API F_GOL_PassSVE : public TSnkeRenderPassSceneViewExtension<U_GOL_RenderPass>
