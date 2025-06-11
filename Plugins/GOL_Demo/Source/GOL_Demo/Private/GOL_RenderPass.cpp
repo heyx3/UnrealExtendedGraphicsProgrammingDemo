@@ -38,7 +38,7 @@ IMPLEMENT_GLOBAL_SHADER(FGoLInitializePS, "/GameOfLife/Init.usf", "Main", SF_Pix
 
 FGameOfLifeView::FGameOfLifeView(FRDGBuilder& graph, const FViewInfo& view, const FIntRect& viewportSubset,
 								 float seed, float noiseScale)
-	: FSnkeViewPersistentData(graph, view, viewportSubset)
+	: F_EGP_ViewPersistentData(graph, view, viewportSubset)
 {
 	auto desc = SimStateDesc(viewportSubset.Size());
 	SimState = RHICreateTexture(desc);
@@ -211,7 +211,7 @@ static void UpdateGoLState(FRDGBuilder& graph, ERHIFeatureLevel::Type featureLev
 
 #pragma endregion
 
-TSharedRef<FSnkeRenderPassSceneViewExtension> U_GOL_RenderPass::InitThisPass_GameThread(UWorld& thisWorld)
+TSharedRef<F_EGP_RenderPassSceneViewExtension> U_GOL_RenderPass::InitThisPass_GameThread(UWorld& thisWorld)
 {
 	return FSceneViewExtensions::NewExtension<F_GOL_PassSVE>(this);
 }
