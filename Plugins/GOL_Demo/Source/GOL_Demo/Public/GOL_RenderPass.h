@@ -2,13 +2,13 @@
 
 #include "CoreMinimal.h"
 
-#include "SnkeCustomRenderPasses.h"
+#include "EGP_CustomRenderPasses.h"
 
 #include "GOL_RenderPass.generated.h"
 
 
 UCLASS(BlueprintType)
-class GOL_DEMO_API U_GOL_RenderPass : public USnkeRenderPass
+class GOL_DEMO_API U_GOL_RenderPass : public U_EGP_RenderPass
 {
 	GENERATED_BODY()
 public:
@@ -26,7 +26,7 @@ public:
 
 protected:
 
-	virtual TSharedRef<FSnkeRenderPassSceneViewExtension> InitThisPass_GameThread(UWorld& thisWorld) override;
+	virtual TSharedRef<F_EGP_RenderPassSceneViewExtension> InitThisPass_GameThread(UWorld& thisWorld) override;
 	virtual void Tick_GameThread(UWorld& thisWorld, float deltaSeconds) override;
 
 private:
@@ -34,10 +34,10 @@ private:
 	TOptional<FLinearColor> color_renderThread;
 };
 
-struct GOL_DEMO_API F_GOL_PassSVE : public TSnkeRenderPassSceneViewExtension<U_GOL_RenderPass>
+struct GOL_DEMO_API F_GOL_PassSVE : public T_EGP_RenderPassSceneViewExtension<U_GOL_RenderPass>
 {
 	//Re-use the parent constructor:
-	using TSnkeRenderPassSceneViewExtension::TSnkeRenderPassSceneViewExtension;
+	using T_EGP_RenderPassSceneViewExtension::T_EGP_RenderPassSceneViewExtension;
 
 	//Apply our effect immediately after the deferred pass
 	//    and before lighting is computed.

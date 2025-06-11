@@ -23,7 +23,7 @@
 	],
 	"Plugins": [
 		{
-			"Name": "SnkeGraphicsProgramming",
+			"Name": "ExtendedGraphicsProgramming",
 			"Enabled": true
 		}
 	]
