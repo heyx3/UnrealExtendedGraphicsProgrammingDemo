@@ -1,9 +1,9 @@
-#include "/SnkeOS/ScreenPass/pre.ush"
+#include "/EGP/ScreenPass/pre.ush"
 
 //Hint to Materials which shader we're running in.
 #define GOL_PASS_DISPLAY 1
 
-#include "/SnkeOS/ScreenPass/post.ush"
+#include "/EGP/ScreenPass/post.ush"
 
 
 float4 Main(in FTexCoordsVSToPS materialInterpolants,

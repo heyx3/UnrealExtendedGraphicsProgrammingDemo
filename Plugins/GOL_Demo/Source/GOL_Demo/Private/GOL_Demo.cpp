@@ -10,7 +10,7 @@ void FGOL_DemoModule::StartupModule()
 {
 	//Make sure the graphics programming library is already initialized
 	//    so that we have its shaders and shader headers.
-	auto dependency = IPluginManager::Get().FindPlugin(TEXT("SnkeGraphicsProgramming"));
+	auto dependency = IPluginManager::Get().FindPlugin(TEXT("ExtendedGraphicsProgramming"));
 	check(dependency && dependency->IsEnabled());
 	
 	//Register our shader folder with the engine.
