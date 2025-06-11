@@ -8,7 +8,7 @@ public class GameOfLife : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 	
-		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "SnkeGraphicsProgramming" });
+		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "ExtendedGraphicsProgramming" });
 
 		PrivateDependencyModuleNames.AddRange(new string[] {  });
 
