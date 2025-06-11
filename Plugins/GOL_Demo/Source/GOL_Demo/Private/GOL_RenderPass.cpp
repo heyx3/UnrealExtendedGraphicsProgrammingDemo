@@ -478,6 +478,9 @@ void F_GOL_PassSVE::PrePostProcessPass_RenderThread(FRDGBuilder& graph, const FS
 {
     check(_view.bIsViewInfo);
     auto& view = reinterpret_cast<const FViewInfo&>(_view);
+	if (!Pass->ViewFilter->ShouldRenderFor(view))
+		return;
+
     auto* passMaterial = Pass->GetEffectMaterial_RenderThread();
     
     RDG_EVENT_SCOPE(graph, "Game of Life, viewport %ix%i",
