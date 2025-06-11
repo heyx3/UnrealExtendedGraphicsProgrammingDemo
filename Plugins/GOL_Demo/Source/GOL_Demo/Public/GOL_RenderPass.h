@@ -2,13 +2,13 @@
 
 #include "CoreMinimal.h"
 
-#include "SnkeCustomRenderPasses.h"
+#include "EGP_CustomRenderPasses.h"
 
 #include "GOL_RenderPass.generated.h"
 
 
 //An instance of the Game of Life sim, running in one particular viewport.
-struct GOL_DEMO_API FGameOfLifeView final : public FSnkeViewPersistentData
+struct GOL_DEMO_API FGameOfLifeView final : public F_EGP_ViewPersistentData
 {
 	static FRHITextureCreateDesc SimStateDesc(const FInt32Point& viewportSize);
 	TRefCountPtr<FRHITexture2D> SimState, SimBuffer;
@@ -27,7 +27,7 @@ struct GOL_DEMO_API FGameOfLifeView final : public FSnkeViewPersistentData
 
 
 UCLASS(BlueprintType)
-class GOL_DEMO_API U_GOL_RenderPass : public USnkeRenderPass
+class GOL_DEMO_API U_GOL_RenderPass : public U_EGP_RenderPass
 {
 	GENERATED_BODY()
 public:
@@ -36,11 +36,11 @@ public:
 	UMaterialInterface* EffectMaterial = nullptr;
 	UMaterialInterface* GetEffectMaterial_RenderThread() const { check(IsInRenderingThread()); return effectMaterial_RenderThread; }
 
-	TSnkePerViewData<FGameOfLifeView> PerViewData;
+	T_EGP_PerViewData<FGameOfLifeView> PerViewData;
 
 protected:
 
-	virtual TSharedRef<FSnkeRenderPassSceneViewExtension> InitThisPass_GameThread(UWorld& thisWorld) override;
+	virtual TSharedRef<F_EGP_RenderPassSceneViewExtension> InitThisPass_GameThread(UWorld& thisWorld) override;
 	virtual void Tick_GameThread(UWorld& thisWorld, float deltaSeconds) override;
 	virtual void Tick_RenderThread(const FSceneInterface& thisScene, float gameThreadDeltaSeconds) override;
 
@@ -50,10 +50,10 @@ private:
 	UMaterialInterface* effectMaterial_RenderThread = nullptr;
 };
 
-struct GOL_DEMO_API F_GOL_PassSVE : public TSnkeRenderPassSceneViewExtension<U_GOL_RenderPass>
+struct GOL_DEMO_API F_GOL_PassSVE : public T_EGP_RenderPassSceneViewExtension<U_GOL_RenderPass>
 {
 	//Re-use the parent constructor:
-	using TSnkeRenderPassSceneViewExtension::TSnkeRenderPassSceneViewExtension;
+	using T_EGP_RenderPassSceneViewExtension::T_EGP_RenderPassSceneViewExtension;
 
 	virtual void PrePostProcessPass_RenderThread(FRDGBuilder& graph, const FSceneView& view,
 												 const FPostProcessingInputs& inputs) override;
