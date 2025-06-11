@@ -15,7 +15,7 @@ public class GOL_Demo : ModuleRules
 		
 		PublicDependencyModuleNames.AddRange(new string[] {
 			"Core",
-			"SnkeGraphicsProgramming"
+			"ExtendedGraphicsProgramming"
 		});
 		PrivateDependencyModuleNames.AddRange(new string[] {
 			"CoreUObject",

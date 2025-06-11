@@ -3,7 +3,7 @@
 #include "CoreMinimal.h"
 #include "Materials/MaterialExpressionCustomOutput.h"
 
-#include "SnkeCustomRenderPasses.h"
+#include "EGP_CustomRenderPasses.h"
 
 #include "BonusRenderEffect.generated.h"
 
@@ -21,7 +21,7 @@ public:
 };
 
 UCLASS(meta=(BlueprintSpawnableComponent))
-class GOL_DEMO_API UBreComponent : public USnkeRenderPassComponent
+class GOL_DEMO_API UBreComponent : public U_EGP_RenderPassComponent
 {
 	GENERATED_BODY()
 public:
@@ -29,20 +29,20 @@ public:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(ShowOnlyInnerProperties))
 	FBrePrimitiveSettings RenderSettings;
 
-	virtual TSubclassOf<USnkeRenderPass> GetPassType() const override;
-	SNKE_PASS_COMPONENT_SIMPLE_PROXY_IMPL(FBrePrimitiveSettings, RenderSettings)
+	virtual TSubclassOf<U_EGP_RenderPass> GetPassType() const override;
+	EGP_PASS_COMPONENT_SIMPLE_PROXY_IMPL(FBrePrimitiveSettings, RenderSettings)
 };
 
 
 UCLASS(BlueprintType)
-class GOL_DEMO_API UBreRenderPass : public USnkeRenderPass
+class GOL_DEMO_API UBreRenderPass : public U_EGP_RenderPass
 {
 	GENERATED_BODY()
 public:
 
 protected:
 
-	virtual TSharedRef<FSnkeRenderPassSceneViewExtension> InitThisPass_GameThread(UWorld& thisWorld) override;
+	virtual TSharedRef<F_EGP_RenderPassSceneViewExtension> InitThisPass_GameThread(UWorld& thisWorld) override;
 };
 
 

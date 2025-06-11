@@ -2,10 +2,11 @@
 
 #include "MaterialCompiler.h"
 #include "SimpleMeshDrawCommandPass.h"
+#include "MaterialDomain.h"
 #include "Runtime/Renderer/Private/PostProcess/PostProcessing.h"
 #include "Runtime/Renderer/Public/MeshPassProcessor.inl"
 
-#include "SnkeGetMeshBatches.h"
+#include "EGP_GetMeshBatches.h"
 
 
 class FBreMeshVS : public FMeshMaterialShader
@@ -212,10 +213,10 @@ BEGIN_SHADER_PARAMETER_STRUCT(FBrePassParameters, )
 	SHADER_PARAMETER_STRUCT_INCLUDE(FInstanceCullingDrawParams, InstanceCullingDrawParams)
 	RENDER_TARGET_BINDING_SLOTS()
 END_SHADER_PARAMETER_STRUCT()
-struct FBrePassSVE : public TSnkeRenderPassSceneViewExtension<UBreRenderPass,
-															  UBreComponent, FBrePrimitiveSettings>
+struct FBrePassSVE : public T_EGP_RenderPassSceneViewExtension<UBreRenderPass,
+								 							   UBreComponent, FBrePrimitiveSettings>
 {
-	using TSnkeRenderPassSceneViewExtension::TSnkeRenderPassSceneViewExtension;
+	using T_EGP_RenderPassSceneViewExtension::T_EGP_RenderPassSceneViewExtension;
 
 	virtual void PrePostProcessPass_RenderThread(FRDGBuilder& graph, const FSceneView& _view,
 												 const FPostProcessingInputs& postInputs) override
@@ -255,7 +256,7 @@ struct FBrePassSVE : public TSnkeRenderPassSceneViewExtension<UBreRenderPass,
 											  const UPrimitiveComponent& primitive,
 											  const FPrimitiveSceneProxy& primitiveProxy)
 			{
-				Snke::ForEachBatch(view, &primitiveProxy,
+				EGP::ForEachBatch(view, &primitiveProxy,
 								   [&](const FMeshBatch& batch, uint64 mask, const auto* sceneProxy, int staticMeshID)
 				{
 					meshProcessor.AddMeshBatch(batch, mask, sceneProxy, staticMeshID);
@@ -265,11 +266,11 @@ struct FBrePassSVE : public TSnkeRenderPassSceneViewExtension<UBreRenderPass,
 	}
 };
 
-TSubclassOf<USnkeRenderPass> UBreComponent::GetPassType() const
+TSubclassOf<U_EGP_RenderPass> UBreComponent::GetPassType() const
 {
 	return UBreRenderPass::StaticClass();
 }
-TSharedRef<FSnkeRenderPassSceneViewExtension> UBreRenderPass::InitThisPass_GameThread(UWorld& thisWorld)
+TSharedRef<F_EGP_RenderPassSceneViewExtension> UBreRenderPass::InitThisPass_GameThread(UWorld& thisWorld)
 {
 	return FSceneViewExtensions::NewExtension<FBrePassSVE>(this);
 }

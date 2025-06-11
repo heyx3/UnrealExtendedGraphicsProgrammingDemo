@@ -1,4 +1,4 @@
-#include "/SnkeOS/ScreenPass/pre.ush"
+#include "/EGP/ScreenPass/pre.ush"
 
 //Hint to Materials which shader we're running in.
 #define GOL_PASS_SIMULATE 1
@@ -10,7 +10,7 @@ static float2 MaterialNeighborStates[9];
 static float MaterialNewDiscreteValue;
 static float MaterialDiscreteSeverityT;
 
-#include "/SnkeOS/ScreenPass/post.ush"
+#include "/EGP/ScreenPass/post.ush"
 
 
 float DeltaSeconds;
