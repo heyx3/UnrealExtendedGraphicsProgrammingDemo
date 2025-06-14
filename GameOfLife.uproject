@@ -1,6 +1,6 @@
 {
 	"FileVersion": 3,
-	"EngineAssociation": "{020F74F6-4AF7-20E1-F80D-AA8E21E8B6F0}",
+	"EngineAssociation": "5.3",
 	"Category": "",
 	"Description": "",
 	"Modules": [
@@ -17,14 +17,6 @@
 			"TargetAllowList": [
 				"Editor"
 			]
-		},
-		{
-			"Name": "ExtendedGraphicsProgramming",
-			"Enabled": true
-		},
-		{
-			"Name": "GOL_Demo",
-			"Enabled": true
 		}
 	]
 }
