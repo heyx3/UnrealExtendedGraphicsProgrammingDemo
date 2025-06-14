@@ -330,14 +330,19 @@ public:
         const FPrimitiveSceneProxy* primitiveSceneProxy,
         const FMaterialRenderProxy& materialRenderProxy,
         const FMaterial& material,
-        const FMeshPassProcessorRenderState& drawRenderState,
+        #if ENGINE_MINOR_VERSION < 4
+            const FMeshPassProcessorRenderState& drawRenderState,
+        #endif
         const FGoLMeshShaderElementData& element,
         FMeshDrawSingleShaderBindings& shaderBindings) const
     {
         FMeshMaterialShader::GetShaderBindings(
             scene, featureLevel,
             primitiveSceneProxy, materialRenderProxy, material,
-            drawRenderState, element, shaderBindings
+            #if ENGINE_MINOR_VERSION < 4
+                drawRenderState,
+            #endif
+            element, shaderBindings
         );
 
         shaderBindings.AddTexture(PreviousStateTex, PreviousStateSampler,
@@ -373,7 +378,12 @@ public:
                       ERHIFeatureLevel::Type featureLevel,
                       FMeshPassDrawListContext* commandsOutput,
                       FBlendStateRHIRef blendState)
-        : FMeshPassProcessor(scene, featureLevel, view, commandsOutput)
+        : FMeshPassProcessor(
+              #if ENGINE_MINOR_VERSION > 3
+        	      TEXT("GameOfLife"),
+        	  #endif
+              scene, featureLevel, view, commandsOutput
+          )
     {
         PassDrawState.SetBlendState(blendState);
         PassDrawState.SetDepthStencilState(TStaticDepthStencilState<false, CF_DepthNearOrEqual>::GetRHI());

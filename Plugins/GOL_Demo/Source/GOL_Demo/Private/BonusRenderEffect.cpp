@@ -156,7 +156,12 @@ public:
     FBreMeshProcessor(const FScene* scene, const FSceneView* view,
                       ERHIFeatureLevel::Type featureLevel,
                       FMeshPassDrawListContext* commandsOutput)
-        : FMeshPassProcessor(scene, featureLevel, view, commandsOutput)
+        : FMeshPassProcessor(
+		      #if ENGINE_MINOR_VERSION > 3
+        	      TEXT("BonusRenderEffect"),
+        	  #endif
+        	  scene, featureLevel, view, commandsOutput
+          )
     {
         PassDrawState.SetBlendState(TStaticBlendState<CW_RGBA, BO_Add, BF_One, BF_Zero>::GetRHI());
         PassDrawState.SetDepthStencilState(TStaticDepthStencilState<false, CF_DepthNearOrEqual>::GetRHI());

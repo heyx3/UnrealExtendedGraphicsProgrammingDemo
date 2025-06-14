@@ -11,7 +11,7 @@
 #pragma region Component rendering
 
 UENUM(BlueprintType)
-enum class EGoLMeshBlendModes
+enum class EGoLMeshBlendModes : uint8
 {
 	Alpha,
 	Additive,
@@ -64,7 +64,7 @@ public:
 struct GOL_DEMO_API FGameOfLifeView final : public F_EGP_ViewPersistentData
 {
 	static FRHITextureCreateDesc SimStateDesc(const FInt32Point& viewportSize);
-	TRefCountPtr<FRHITexture2D> SimState, SimBuffer;
+	TRefCountPtr<FRHITexture> SimState, SimBuffer;
  
 	float NextTickTime = 0;
 	bool ReinitializeViews = false;
