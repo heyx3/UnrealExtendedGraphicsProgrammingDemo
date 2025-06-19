@@ -3,6 +3,7 @@
 //Include the Material code THEN the Vertex Factory code.
 //For Intellisense, as a stand-in, use the Material template and a specific built-in vertex factory.
 #if defined(__RESHARPER__) || defined(__INTELLISENSE__)
+    #define VERTEXSHADER 1
     #define PIXELSHADER 1
     #include "/Engine/Private/MaterialTemplate.ush"
     #include "/Engine/Private/LocalVertexFactory.ush"
@@ -17,6 +18,8 @@ struct FPassVSToPS
     FVertexFactoryInterpolantsVSToPS VFInterpolants;
     float4 Position : SV_POSITION;
 };
+
+#if VERTEXSHADER
 
 //The vertex shader is a pretty simple pass-through,
 //    invoking the Vertex Factory for world-space data
@@ -42,15 +45,19 @@ void MainVS(FVertexFactoryInput inputs, out FPassVSToPS outputs)
                                      ResolvedView.TranslatedWorldToClip));
 }
 
-
-#if PIXELSHADER
-    Texture2D<float2> PreviousStateTex;
-    SamplerState PreviousStateSampler;
 #endif
 
+
+#if PIXELSHADER
+
+Texture2D<float2> PreviousStateTex;
+SamplerState PreviousStateSampler;
+
 //The pixel shader invokes our custom Material output pins.
-void MainPS(in FPassVSToPS inputs //No comma here; the macro on the next line may be empty
+void MainPS(in FPassVSToPS inputs //No comma; the below macro may be empty
                 OPTIONAL_IsFrontFace,
+            //Output includes an Alpha channel for blending,
+            //   even though the actual texture is two-channel
             out float4 outState : SV_Target0)
 {
     //Process uniforms.
@@ -65,7 +72,7 @@ void MainPS(in FPassVSToPS inputs //No comma here; the macro on the next line ma
     FPixelMaterialInputs mInputs;
     CalcMaterialParameters(mParameters, mInputs, inputs.Position, bIsFrontFace);
 
-    //Read our custom outputs.
+    //Read and write our custom outputs.
     outState.x =
         #if HAVE_GoL_Outputs_Mesh_0
             GoL_Outputs_Mesh_0(mParameters)
@@ -88,3 +95,5 @@ void MainPS(in FPassVSToPS inputs //No comma here; the macro on the next line ma
         #endif
     ;
 }
+
+#endif
